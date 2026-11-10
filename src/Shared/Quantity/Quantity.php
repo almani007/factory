@@ -2,7 +2,7 @@
 
 namespace Shared\Quantity;
 
-use Shared\Contracts\QuantityInterface;
+use App\Shared\Contracts\QuantityInterface;
 
 class Quantity implements QuantityInterface
 {
@@ -42,8 +42,29 @@ class Quantity implements QuantityInterface
         return new self(bcmul($this->value, (string) $multiplier, 4), $this->unit);
     }
 
+    public function isZero(): bool
+    {
+        return bccomp($this->value, '0', 4) === 0;
+    }
+
+    public function isPositive(): bool
+    {
+        return bccomp($this->value, '0', 4) > 0;
+    }
+
+    public function equals(QuantityInterface $quantity): bool
+    {
+        return $this->unit === $quantity->unit()
+            && bccomp($this->value, $quantity->value(), 4) === 0;
+    }
+
+    public function format(int $decimals = 2): string
+    {
+        return number_format((float) $this->value, $decimals) . ' ' . $this->unit;
+    }
+
     public function __toString(): string
     {
-        return $this->value.' '.$this->unit;
+        return $this->value . ' ' . $this->unit;
     }
 }

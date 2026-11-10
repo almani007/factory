@@ -2,7 +2,7 @@
 
 namespace Shared\Money;
 
-use Shared\Contracts\MoneyInterface;
+use App\Shared\Contracts\MoneyInterface;
 
 class Money implements MoneyInterface
 {
@@ -57,8 +57,19 @@ class Money implements MoneyInterface
         return bccomp($this->amount, '0', 4) < 0;
     }
 
+    public function equals(MoneyInterface $money): bool
+    {
+        return $this->currency === $money->currency()
+            && bccomp($this->amount, $money->amount(), 4) === 0;
+    }
+
+    public function format(int $decimals = 2): string
+    {
+        return number_format((float) $this->amount, $decimals) . ' ' . $this->currency;
+    }
+
     public function __toString(): string
     {
-        return $this->currency.' '.$this->amount;
+        return $this->currency . ' ' . $this->amount;
     }
 }
