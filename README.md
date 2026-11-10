@@ -128,11 +128,76 @@ php artisan serve
 docker compose up -d
 ```
 
-### Docker
+### Docker (Recommended — Zero Config)
+
+Just clone and run. Everything (PHP dependencies, Node dependencies, app key,
+migrations, storage link, cache) is handled automatically on first start.
 
 ```bash
-# Development
-docker compose up -d
+# Clone the repository
+git clone <repo-url> factory
+cd factory
+
+# Copy environment (optional - defaults work out of the box)
+cp .env.example .env
+
+# Start all services (PHP, Nginx, PostgreSQL, Redis, Node, Queue, Scheduler)
+docker compose up -d --build
+
+# That's it! The app is running at: http://localhost:8000
+```
+
+**Services included:**
+- `factory_app` — PHP 8.5 + Laravel (port 9000)
+- `factory_nginx` — Nginx web server (port 8000)
+- `factory_postgres` — PostgreSQL 18 (port 5432)
+- `factory_redis` — Redis 8 (port 6379)
+- `factory_node` — Vite dev server (port 5173)
+- `factory_queue` — Laravel queue worker
+- `factory_scheduler` — Laravel task scheduler
+
+**Useful commands:**
+
+```bash
+# View logs
+docker compose logs -f
+
+# Stop all services
+docker compose down
+
+# Restart
+docker compose restart
+
+# Rebuild after code changes
+docker compose up -d --build
+
+# Run migrations
+docker compose exec app php artisan migrate
+
+# Run seeders
+docker compose exec app php artisan db:seed
+
+# Open app shell
+docker compose exec app bash
+
+# Open database shell
+docker compose exec postgres psql -U factory -d factory
+
+# Clear caches
+docker compose exec app php artisan optimize:clear
+
+# Full server setup (first time on a new server)
+chmod +x scripts/setup.sh
+./scripts/setup.sh
+```
+
+**On a fresh server:**
+
+```bash
+git clone <repo-url> factory
+cd factory
+./scripts/setup.sh
+# App is running at http://localhost:8000
 ```
 
 ## Testing

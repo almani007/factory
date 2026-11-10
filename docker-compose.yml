@@ -1,5 +1,12 @@
 name: factory
 
+# ============================================================================
+# Brixel FactoryOS - Docker Compose
+# ============================================================================
+# Just run: docker compose up -d
+# Everything is auto-configured (migrations, key generation, storage link)
+# ============================================================================
+
 x-laravel: &laravel
   image: factory_app
   build:
@@ -7,12 +14,14 @@ x-laravel: &laravel
     dockerfile: docker/php/Dockerfile
   working_dir: /var/www/html
   volumes:
-    - .:/var/www/html
+    - .:/var/www/html:delegated
   environment:
     APP_NAME: "Brixel FactoryOS"
     APP_ENV: local
     APP_DEBUG: "true"
     APP_URL: http://localhost:8000
+    APP_TIMEZONE: Asia/Karachi
+    APP_LOCALE: en
     DB_CONNECTION: pgsql
     DB_HOST: postgres
     DB_PORT: 5432
@@ -25,6 +34,16 @@ x-laravel: &laravel
     REDIS_CLIENT: predis
     REDIS_HOST: redis
     REDIS_PORT: 6379
+    MAIL_MAILER: log
+    AWS_ACCESS_KEY_ID:
+    AWS_SECRET_ACCESS_KEY:
+    AWS_DEFAULT_REGION: us-east-1
+    AWS_BUCKET:
+    SANACTUM_STATEFUL_DOMAINS: localhost:8000
+    SESSION_DOMAIN: localhost
+    LICENSE_MODE: local
+    LICENSE_FILE: storage/licence/licence.dat
+    LICENSE_VALIDATION_INTERVAL_HOURS: 24
   depends_on:
     postgres:
       condition: service_healthy
@@ -34,11 +53,25 @@ x-laravel: &laravel
     - factory_network
 
 services:
+  # =========================================================================
+  # App (PHP 8.5 + Laravel)
+  # =========================================================================
   app:
     <<: *laravel
     container_name: factory_app
     restart: unless-stopped
+    ports:
+      - "9000:9000"
+    healthcheck:
+      test: ["CMD", "php", "-r", "new PDO('pgsql:host=postgres;port=5432;dbname=factory', 'factory', 'factory_secret');"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
+  # =========================================================================
+  # Nginx Web Server
+  # =========================================================================
   nginx:
     image: nginx:alpine
     container_name: factory_nginx
@@ -49,10 +82,14 @@ services:
       - .:/var/www/html:ro
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      - app
+      app:
+        condition: service_healthy
     networks:
       - factory_network
 
+  # =========================================================================
+  # PostgreSQL 18 Database
+  # =========================================================================
   postgres:
     image: postgres:18-alpine
     container_name: factory_postgres
@@ -75,6 +112,9 @@ services:
     networks:
       - factory_network
 
+  # =========================================================================
+  # Redis 8 (Cache, Queue, Sessions)
+  # =========================================================================
   redis:
     image: redis:8-alpine
     container_name: factory_redis
@@ -91,8 +131,11 @@ services:
     networks:
       - factory_network
 
+  # =========================================================================
+  # Node.js (Vite Dev Server for Hot Module Replacement)
+  # =========================================================================
   node:
-    image: node:current-alpine
+    image: node:22-alpine
     container_name: factory_node
     restart: unless-stopped
     working_dir: /var/www/html
@@ -102,29 +145,50 @@ services:
       VITE_HMR_PORT: 5173
       APP_URL: http://localhost:8000
     volumes:
-      - .:/var/www/html
+      - .:/var/www/html:delegated
       - factory_node_modules:/var/www/html/node_modules
     command: [sh, -c, "npm install && npm run dev -- --host 0.0.0.0 --port 5173"]
     networks:
       - factory_network
 
+  # =========================================================================
+  # Queue Worker
+  # =========================================================================
   queue:
     <<: *laravel
     container_name: factory_queue
     restart: unless-stopped
     command: [php, artisan, queue:work, --sleep=3, --tries=3, --timeout=60]
+    depends_on:
+      - app
+      - redis
+    networks:
+      - factory_network
 
+  # =========================================================================
+  # Scheduler
+  # =========================================================================
   scheduler:
     <<: *laravel
     container_name: factory_scheduler
     restart: unless-stopped
     command: [php, artisan, schedule:work]
+    depends_on:
+      - app
+    networks:
+      - factory_network
 
+# ===========================================================================
+# Volumes
+# ===========================================================================
 volumes:
   factory_postgres_data:
   factory_redis_data:
   factory_node_modules:
 
+# ===========================================================================
+# Networks
+# ===========================================================================
 networks:
   factory_network:
     driver: bridge

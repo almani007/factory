@@ -1,5 +1,6 @@
-# Brixel FactoryOS — .gitignore
+# Zoventra FactoryOS — .gitignore
 
+# Laravel
 /vendor/
 /node_modules/
 /public/hot
@@ -8,28 +9,44 @@
 /resources/js/vendor
 /storage/*.key
 /bootstrap/cache/*.php
-.env
-.env.*.php
-.phpunit.result.cache
-/ide-helper.php
 /.idea/
 /.phpstorm.meta.php
+.phpunit.result.cache
+/ide-helper.php
+
+# OS
 .DS_Store
 Thumbs.db
 *.swp
 *.swo
+
+# Logs
 *.log
 /storage/logs/*.log
+
+# Build artifacts
 /dist/
 /build/
 /.next/
 /.turbo/
+
+# IDE
 .vscode/
+.idea/
+
+# Environment / secrets
+.env
+.env.*.php
 .env.local
 .env.*.local
 *.pem
 *.key
 *.crt
+
+# IDE / temp
 ~*
 *.tmp
 *.bak
+
+# Docker
+.dockerignore
