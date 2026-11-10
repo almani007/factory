@@ -15,6 +15,7 @@ x-laravel: &laravel
   working_dir: /var/www/html
   volumes:
     - .:/var/www/html:delegated
+    - factory_vendor:/var/www/html/vendor
   environment:
     APP_NAME: "Brixel FactoryOS"
     APP_ENV: local
@@ -182,6 +183,7 @@ volumes:
   factory_postgres_data:
   factory_redis_data:
   factory_node_modules:
+  factory_vendor:
 
 # ===========================================================================
 # Networks

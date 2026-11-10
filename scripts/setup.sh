@@ -1,63 +1,105 @@
 #!/bin/bash
 # ============================================================================
-# Brixel FactoryOS - Setup Script
+# Brixel FactoryOS - Complete Setup Script
 # ============================================================================
-# Run this on a fresh server to get everything running:
-#   chmod +x scripts/setup.sh
-#   ./scripts/setup.sh
+# Sets up everything using Docker (no PHP needed on host):
+#   1. Creates artisan file if missing
+#   2. Builds Docker image (composer install happens inside Docker)
+#   3. Starts Docker containers
 # ============================================================================
 
 set -e
 
 echo "========================================"
-echo "Brixel FactoryOS - Server Setup"
+echo "Brixel FactoryOS - Complete Setup"
 echo "========================================"
 
-# Check for Docker
-if ! command -v docker &> /dev/null; then
-    echo "Docker is not installed. Please install Docker first."
-    echo "Visit: https://docs.docker.com/engine/install/"
+# --- Detect Docker ---
+if command -v docker &> /dev/null; then
+    echo "✓ Docker found"
+else
+    echo "✗ Docker not found. Please install Docker"
     exit 1
 fi
 
-if ! command -v docker compose &> /dev/null; then
-    echo "Docker Compose is not installed. Please install Docker Compose plugin."
+if command -v docker compose &> /dev/null || docker compose version &> /dev/null 2>&1; then
+    echo "✓ Docker Compose found"
+else
+    echo "✗ Docker Compose not found. Please install Docker Compose"
     exit 1
 fi
 
-# Copy environment file if it doesn't exist
+# --- Step 1: Create .env from .env.example ---
+echo ""
+echo "--- Step 1: Environment Configuration ---"
 if [ ! -f .env ]; then
-    echo "Creating .env from .env.example..."
     cp .env.example .env
+    echo "✓ Created .env from .env.example"
+else
+    echo "✓ .env already exists"
 fi
 
-# Create required directories
-mkdir -p storage bootstrap/cache docker/postgres/init
+# --- Step 2: Create artisan if missing ---
+echo ""
+echo "--- Step 2: Laravel Artisan ---"
+if [ ! -f artisan ]; then
+    cat > artisan << 'ARTISAN'
+#!/usr/bin/env php
+<?php
 
-# Set permissions
-chmod -R 775 storage bootstrap/cache 2>/dev/null || true
-chmod -R 775 docker 2>/dev/null || true
+use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Foundation\Application;
+use Symfony\Component\Console\Input\ArgvInput;
+use Symfony\Component\Console\Output\ConsoleOutput;
 
-# Pull latest images
-echo "Pulling Docker images..."
-docker compose pull
+define('LARAVEL_START', microtime(true));
 
-# Build and start all services
-echo "Starting Brixel FactoryOS..."
-docker compose up -d --build
+// Register the Composer autoloader...
+if (file_exists(__DIR__.'/vendor/autoload.php')) {
+    require __DIR__.'/vendor/autoload.php';
+}
+
+$app = require_once __DIR__.'/bootstrap/app.php';
+
+$kernel = $app->make(Kernel::class);
+
+$input = new ArgvInput();
+$output = new ConsoleOutput();
+
+$status = $kernel->handle($input, $output);
+
+$kernel->terminate($input, $status);
+
+exit($status);
+ARTISAN
+    chmod +x artisan
+    echo "✓ Created artisan"
+else
+    echo "✓ artisan already exists"
+fi
+
+# --- Step 3: Start Docker ---
+echo ""
+echo "--- Step 3: Docker Containers ---"
+echo "Building and starting Docker containers..."
+docker compose up -d --build 2>&1 || {
+    echo "✗ Docker Compose failed"
+    exit 1
+}
 
 echo ""
 echo "========================================"
-echo "Brixel FactoryOS is running!"
+echo "Setup Complete!"
 echo "========================================"
 echo ""
-echo "  Application: http://localhost:8000"
+echo "  Application: http://localhost:8087"
+echo "  Health:      http://localhost:8087/up"
 echo "  Database:    localhost:5432 (PostgreSQL)"
 echo "  Cache:       localhost:6379 (Redis)"
 echo ""
-echo "  To view logs:   docker compose logs -f"
-echo "  To stop:        docker compose down"
-echo "  To restart:     docker compose restart"
+echo "  Useful commands:"
+echo "    docker compose logs -f        # View logs"
+echo "    docker compose down           # Stop services"
+echo "    docker compose restart        # Restart services"
 echo ""
-echo "  The application will auto-run migrations on first start."
 echo "========================================"
