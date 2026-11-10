@@ -1,6 +1,6 @@
 # Brixel FactoryOS — Makefile
 
-.PHONY: help install dev test lint docker-up docker-down migrate seed fresh lint-fix
+.PHONY: help install dev test lint docker-up docker-down migrate seed fresh lint-fix key:generate cache:clear ci
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -10,10 +10,10 @@ install: ## Install PHP and JS dependencies
 	npm install
 
 dev: ## Start development environment
-	docker-compose -f docker-compose.yml up -d
+	docker compose up -d
 
 docker-down: ## Stop and remove containers
-	docker-compose -f docker-compose.yml down
+	docker compose down
 
 migrate: ## Run database migrations
 	php artisan migrate

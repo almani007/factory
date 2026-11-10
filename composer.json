@@ -15,7 +15,8 @@
     "predis/predis": "^2.0",
     "league/flysystem-aws-s3-v3": "^3.0",
     "ramsey/uuid": "^4.0",
-    "brianium/paratest": "^6.0"
+    "brianium/paratest": "^6.0",
+    "brick/math": "^0.10"
   },
   "require-dev": {
     "pestphp/pest": "^3.0",

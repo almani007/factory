@@ -25,70 +25,72 @@ One platform to answer: **What did we purchase, what did we manufacture, what di
 
 | Component | Technology |
 |---|---|
-| Backend | Laravel 13 |
-| PHP | PHP 8.4 |
-| Frontend | React + TypeScript |
-| Application integration | Inertia.js |
-| UI components | Tailwind CSS + shadcn/ui |
+| Backend | Laravel |
+| PHP | PHP 8.4+ |
+| Frontend | React + TypeScript + Vite |
+| UI | Tailwind CSS + shadcn/ui |
 | Database | PostgreSQL |
 | Cache | Redis |
-| Queue processing | Laravel Queues + Horizon |
-| Real-time | Laravel Reverb |
-| Authentication | Laravel authentication + Sanctum |
-| Permissions | Spatie Laravel Permission (tenant-aware) |
-| File storage | S3-compatible or local |
-| Testing | Pest |
-| Monitoring | Sentry + Laravel Telescope |
+| Queue | Laravel Queues + Redis |
+| Authentication | Laravel + Sanctum |
 | Deployment | Docker + Nginx |
-| CI/CD | GitHub Actions |
 
 ## Architecture
 
-**Modular monolith** — one Laravel application with clear boundaries between business domains. No separate microservice per module.
+**Modular monolith with Domain-Driven Design (DDD)** — one Laravel application with bounded context modules in `src/`. Each module follows DDD layers:
 
 ```
-factoryos/
-├── app/
-│   ├── Modules/        (Core, Tenancy, Identity, Organisation, Configuration,
-│   │   │                 Products, Inventory, Purchasing, Manufacturing, Production,
-│   │   │                 Quality, Costing, Sales, Dispatch, Accounting, Maintenance,
-│   │   │                 HR, Reporting, Notifications, Integrations)
-│   ├── Shared/         (Contracts, Enums, Exceptions, Money, Quantity, Support)
-│   └── Providers/
-├── resources/js/       (React + TypeScript frontend)
-├── routes/             (web.php, api.php)
-├── database/           (migrations, seeders, factories)
-├── tests/              (Feature, Integration, Unit)
-├── docker/             (dev, staging, cloud, on-premises)
-├── docs/               (erd, api, wireframes, architecture)
-└── deployment/         (cloud, on-premises)
+src/{Module}/
+├── Application/        # Use cases, services, DTOs, contracts
+├── Domain/             # Entities, enums, exceptions, value objects
+├── Infrastructure/     # Providers, persistence (models), middleware
+│   ├── Provider/
+│   └── Persistence/
+└── Presentation/       # HTTP controllers, requests, resources
 ```
 
-## Module Boundaries
+Modules: Tenancy, Identity, Organisation, Configuration, Products, Inventory, Purchasing, Manufacturing, Production, Quality, Costing, Sales, Dispatch, Accounting, Maintenance, HR, Reporting, Notifications, Integrations, Shared.
 
-Each module owns its business logic, policies, services, events, jobs, requests, and tests. Modules must not directly manipulate another module's internal tables. Cross-module communication happens through explicit application services and events (transactional outbox pattern).
+## Key Design Decisions
 
-See `docs/MODULE_BOUNDARIES.md` for the complete module interaction rules and dependency map.
+- **Tenant isolation** — Every tenant record carries `tenant_id`; factory records carry `factory_id`
+- **Immutable inventory ledger** — `stock_movements` is the authoritative stock history
+- **Double-entry accounting** — `journal_entries` / `journal_lines` must balance (Σ Debits = Σ Credits)
+- **BOM versioning** — Production orders retain the exact BOM/routing version at approval
+- **Atomic transactions** — Stock and accounting postings are atomic
+- **Configurable manufacturing** — Operations, routings, and work centres are data-driven
+- **Money/Quantity value objects** — Decimal precision, no floating-point for money
 
-## Key Engineering Principles
+## Directory Structure
 
-- **Tenant isolation** — every tenant-owned record carries `tenant_id`; factory-specific records additionally carry `factory_id`. Company A must never access Company B's records.
-- **Immutable inventory ledger** — `stock_movements` / `stock_movement_lines` are the authoritative stock history; `stock_balances` is a controlled projection.
-- **Double-entry accounting** — `journal_entries` / `journal_lines` must balance (`Σ Debits = Σ Credits`); posted journals cannot be silently changed.
-- **BOM versioning** — a production order retains the exact BOM/routing version used at approval.
-- **Atomic transactions** — stock postings and journal postings are atomic.
-- **Configurable manufacturing** — operations, routings, and work centres are data-driven, not hardcoded.
-- **Cloud + on-premises** — same codebase, Docker-based deployment; licensing supports offline operation.
-
-## Documentation
-
-- `FINAL_SRS.md` — Final Software Requirements Specification
-- `DATABASE_ERD.md` — Complete database ERD and schema catalogue
-- `MODULE_BOUNDARIES.md` — Module boundaries, dependency rules, and event flows
-- `DEVELOPMENT_BACKLOG.md` — Epics, stories, priorities (P0/P1/P2/P3)
-- `API_SPEC.md` — Versioned REST API specification (/api/v1)
-- `ACCOUNTING_INVENTORY_TRANSACTION_SPEC.md` — Exact posting rules, costing and reversal behaviour
-- `SPRINT_PLAN.md` — Delivery sequence and exit conditions per stage
+```
+factory/
+├── app/                    # Laravel core (Providers, Http, Console)
+├── bootstrap/              # Laravel bootstrap
+├── config/                 # Configuration files
+├── database/               # Migrations (19 files), seeders, factories
+├── docker/                 # Docker (frontend, nginx, php, postgres)
+├── docs/                   # Documentation (srs)
+├── public/                 # Public entry point
+├── resources/              # CSS, JS, views
+│   ├── js/
+│   │   ├── app/            # App entry and layout
+│   │   ├── features/       # Feature-based page components
+│   │   │   ├── dashboard, inventory, purchasing, production,
+│   │   │   │   quality, costing, sales, dispatch, accounting
+│   │   │   └── shared/     # Shared pages registry
+│   │   ├── modules/        # Shared modules (Link, pages registry)
+│   │   └── ...
+│   └── ...
+├── routes/                 # Web and API routes
+├── src/                    # DDD domain modules (19 modules)
+├── tests/                  # Feature and Unit tests
+├── artisan                 # Laravel CLI
+├── composer.json           # PHP dependencies
+├── docker-compose.yml      # Docker services
+├── package.json            # JS dependencies
+└── vite.config.js          # Vite configuration
+```
 
 ## Getting Started
 
@@ -103,10 +105,6 @@ See `docs/MODULE_BOUNDARIES.md` for the complete module interaction rules and de
 ### Development setup
 
 ```bash
-# Clone the repository
-git clone <repo-url> factory
-cd factory
-
 # Copy environment
 cp .env.example .env
 
@@ -127,20 +125,14 @@ npm run dev
 php artisan serve
 
 # Or use Docker
-docker-compose -f docker-compose.yml up -d
+docker compose up -d
 ```
 
 ### Docker
 
 ```bash
 # Development
-docker-compose -f docker-compose.yml up -d
-
-# Cloud production
-docker-compose -f docker-compose.prod.yml up -d
-
-# On-premises
-docker-compose -f docker-compose.onprem.yml up -d
+docker compose up -d
 ```
 
 ## Testing
@@ -153,14 +145,9 @@ vendor/bin/pest
 npm run test
 ```
 
-## Coding Conventions
+## Documentation
 
-- PSR-12 for PHP
-- TypeScript strict mode for frontend
-- Actions for individual business operations
-- Services for cohesive domain functionality
-- DTOs for explicit module contracts
-- Pest for PHP testing
+- `docs/srs/SRS.md` — Software Requirements Specification
 
 ## Licensing
 
