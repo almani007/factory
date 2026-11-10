@@ -24,8 +24,7 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
 
-            $table->index(['tenant_id', 'factory_id']);
-            $table->index(['company_id', 'is_active']);
+            $table->index(['tenant_id', 'is_active']);
         });
 
         Schema::create('departments', function (Blueprint $table) {

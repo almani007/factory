@@ -38,12 +38,12 @@ return new class extends Migration
 
         Schema::create('stock_movement_lines', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('movement_id')->constrained()->onDelete('cascade');
+            $table->foreignId('movement_id')->constrained('stock_movements')->onDelete('cascade');
             $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
             $table->foreignId('item_id')->constrained()->onDelete('cascade');
             $table->foreignId('item_variant_id')->nullable()->constrained()->onDelete('cascade');
-            $table->foreignId('batch_id')->nullable()->constrained('stock_batches')->onDelete('set null');
-            $table->foreignId('serial_number_id')->nullable()->constrained('stock_serial_numbers')->onDelete('set null');
+            $table->unsignedBigInteger('batch_id')->nullable();
+            $table->unsignedBigInteger('serial_number_id')->nullable();
             $table->foreignId('warehouse_id')->nullable()->constrained()->onDelete('cascade');
             $table->foreignId('bin_id')->nullable()->constrained('warehouse_bins')->onDelete('set null');
             $table->decimal('quantity', 12, 4);
@@ -63,7 +63,7 @@ return new class extends Migration
             $table->foreignId('warehouse_id')->nullable()->constrained()->onDelete('cascade');
             $table->foreignId('item_id')->constrained()->onDelete('cascade');
             $table->foreignId('item_variant_id')->nullable()->constrained()->onDelete('cascade');
-            $table->foreignId('batch_id')->nullable()->constrained('stock_batches')->onDelete('set null');
+            $table->unsignedBigInteger('batch_id')->nullable();
             $table->decimal('on_hand', 12, 4)->default(0);
             $table->decimal('reserved', 12, 4)->default(0);
             $table->decimal('in_transit', 12, 4)->default(0);

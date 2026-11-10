@@ -46,7 +46,7 @@ return new class extends Migration
             $table->integer('sequence');
             $table->string('operation_name');
             $table->foreignId('work_centre_id')->nullable()->constrained()->onDelete('cascade');
-            $table->foreignId('machine_id')->nullable()->constrained('machines')->onDelete('set null');
+            $table->unsignedBigInteger('machine_id')->nullable();
             $table->integer('setup_time_minutes')->default(0);
             $table->decimal('run_time_per_unit_minutes', 10, 4)->default(0);
             $table->boolean('is_active')->default(true);

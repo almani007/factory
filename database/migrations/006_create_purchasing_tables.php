@@ -111,7 +111,7 @@ return new class extends Migration
             $table->foreignId('item_id')->constrained()->onDelete('cascade');
             $table->decimal('quantity', 12, 4);
             $table->foreignId('unit_id')->nullable()->constrained()->onDelete('cascade');
-            $table->foreignId('batch_id')->nullable()->constrained('stock_batches')->onDelete('set null');
+            $table->unsignedBigInteger('batch_id')->nullable();
             $table->foreignId('stock_movement_id')->nullable()->constrained()->onDelete('set null');
             $table->timestamps();
 

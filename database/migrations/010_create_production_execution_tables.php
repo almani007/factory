@@ -53,7 +53,7 @@ return new class extends Migration
             $table->foreignId('unit_id')->nullable()->constrained()->onDelete('cascade');
             $table->foreignId('warehouse_id')->nullable()->constrained()->onDelete('cascade');
             $table->foreignId('bin_id')->nullable()->constrained('warehouse_bins')->onDelete('set null');
-            $table->foreignId('batch_id')->nullable()->constrained('stock_batches')->onDelete('set null');
+            $table->unsignedBigInteger('batch_id')->nullable();
             $table->decimal('unit_cost', 15, 4)->default(0);
             $table->decimal('total_cost', 15, 4)->default(0);
             $table->timestamps();
@@ -105,7 +105,7 @@ return new class extends Migration
             $table->decimal('rework_quantity', 12, 4)->default(0);
             $table->decimal('scrap_quantity', 12, 4)->default(0);
             $table->foreignId('operator_id')->nullable()->constrained('users')->onDelete('set null');
-            $table->foreignId('machine_id')->nullable()->constrained('machines')->onDelete('set null');
+            $table->unsignedBigInteger('machine_id')->nullable();
             $table->foreignId('shift_id')->nullable()->constrained('shifts')->onDelete('set null');
             $table->text('notes')->nullable();
             $table->foreignId('approved_by')->nullable()->constrained('users')->onDelete('set null');
@@ -123,7 +123,7 @@ return new class extends Migration
             $table->foreignId('item_id')->constrained()->onDelete('cascade');
             $table->decimal('quantity', 12, 4);
             $table->foreignId('unit_id')->nullable()->constrained()->onDelete('cascade');
-            $table->foreignId('batch_id')->nullable()->constrained('stock_batches')->onDelete('set null');
+            $table->unsignedBigInteger('batch_id')->nullable();
             $table->foreignId('warehouse_id')->nullable()->constrained()->onDelete('cascade');
             $table->foreignId('bin_id')->nullable()->constrained('warehouse_bins')->onDelete('set null');
             $table->timestamps();
@@ -153,7 +153,7 @@ return new class extends Migration
             $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
             $table->foreignId('factory_id')->nullable()->constrained()->onDelete('cascade');
             $table->foreignId('work_order_id')->nullable()->constrained()->onDelete('cascade');
-            $table->foreignId('machine_id')->nullable()->constrained('machines')->onDelete('set null');
+            $table->unsignedBigInteger('machine_id')->nullable();
             $table->timestamp('start_time');
             $table->timestamp('end_time')->nullable();
             $table->integer('duration_minutes');

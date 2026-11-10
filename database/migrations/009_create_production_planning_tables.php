@@ -39,7 +39,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
             $table->foreignId('factory_id')->nullable()->constrained()->onDelete('cascade');
-            $table->foreignId('sales_order_id')->nullable()->constrained('sales_orders')->onDelete('set null');
+            $table->foreignId('sales_order_id')->nullable();
             $table->foreignId('bom_header_id')->constrained()->onDelete('cascade');
             $table->foreignId('bom_version_id')->constrained()->onDelete('cascade');
             $table->foreignId('routing_version_id')->nullable()->constrained()->onDelete('set null');
@@ -84,7 +84,7 @@ return new class extends Migration
             $table->foreignId('factory_id')->nullable()->constrained()->onDelete('cascade');
             $table->foreignId('production_order_id')->constrained()->onDelete('cascade');
             $table->foreignId('work_centre_id')->nullable()->constrained()->onDelete('cascade');
-            $table->foreignId('machine_id')->nullable()->constrained('machines')->onDelete('set null');
+            $table->unsignedBigInteger('machine_id')->nullable();
             $table->foreignId('operator_id')->nullable()->constrained('users')->onDelete('set null');
             $table->string('operation_name');
             $table->decimal('planned_quantity', 12, 4);

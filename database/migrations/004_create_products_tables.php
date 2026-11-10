@@ -50,7 +50,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
             $table->foreignId('factory_id')->nullable()->constrained()->onDelete('cascade');
-            $table->foreignId('category_id')->nullable()->constrained()->onDelete('cascade');
+            $table->foreignId('category_id')->nullable()->constrained('item_categories')->onDelete('cascade');
             $table->string('sku')->unique();
             $table->string('name');
             $table->text('description')->nullable();
@@ -61,7 +61,7 @@ return new class extends Migration
             $table->json('specifications')->nullable();
             $table->decimal('min_stock', 12, 4)->default(0);
             $table->decimal('reorder_level', 12, 4)->default(0);
-            $table->foreignId('preferred_supplier_id')->nullable()->constrained('suppliers')->onDelete('set null');
+            $table->unsignedBigInteger('preferred_supplier_id')->nullable();
             $table->decimal('default_purchase_price', 15, 4)->default(0);
             $table->decimal('standard_production_cost', 15, 4)->default(0);
             $table->boolean('is_active')->default(true);
