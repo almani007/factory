@@ -1,68 +1,136 @@
 /**
  * Brixel FactoryOS — Dashboard Page
- * Manufacturing management overview with key KPIs.
+ * Real-time overview of manufacturing operations.
  */
-import { Head } from '@inertiajs/react';
-import { BarChart, Truck, Factory, Shield, CreditCard, AlertCircle, Clock } from 'lucide-react';
 
-const KPI_CARDS = [
-  { title: 'Production Today', value: '1,240 units', icon: Factory, change: '+12%', trend: 'up' },
-  { title: 'Raw Material Value', value: 'Rs. 4.2M', icon: Truck, change: '-3%', trend: 'down' },
-  { title: 'Orders Delayed', value: '4', icon: AlertCircle, change: '+2', trend: 'up' },
-  { title: 'Finished Goods', value: '890 units', icon: Clock, change: '+8%', trend: 'up' },
-  { title: 'Quality Rejections', value: '2.1%', icon: Shield, change: '-0.4%', trend: 'down' },
-  { title: 'Actual Unit Cost', value: 'Rs. 149', icon: CreditCard, change: '+10.4%', trend: 'up' },
-];
+import { Head, Link, usePage } from "@inertiajs/react";
+import { AppLayout } from "@/components/layout";
+import { PageHeader } from "@/components/layout";
+import { KPICard } from "@/components/KPICard";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Factory, Truck, Shield, CreditCard, Clock, AlertCircle } from "lucide-react";
 
 export default function Dashboard() {
+  const { data } = usePage() as any;
+  const stats = data?.stats || {
+    production_today: 0,
+    raw_material_value: 0,
+    orders_delayed: 0,
+    finished_goods: 0,
+    quality_rejection_rate: 0,
+    actual_unit_cost: 0,
+  };
+
   return (
-    <div>
-      <Head title="Dashboard — Brixel FactoryOS" />
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Factory Dashboard</h1>
-        <p className="text-gray-600">Real-time overview of manufacturing operations</p>
-      </div>
+    <AppLayout title="Dashboard">
+      <PageHeader
+        title="Factory Dashboard"
+        subtitle="Real-time overview of manufacturing operations"
+      />
 
       {/* KPI Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-        {KPI_CARDS.map((card) => (
-          <div key={card.title} className="bg-white p-6 rounded-xl border shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <p className="text-sm text-gray-500">{card.title}</p>
-                <p className="text-2xl font-bold">{card.value}</p>
-              </div>
-              <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
-                <card.icon size={20} />
-              </div>
-            </div>
-            <div className={`text-xs font-medium ${card.trend === 'up' ? 'text-red-600' : 'text-green-600'}`}>
-              {card.change}
-            </div>
-          </div>
-        ))}
+        <KPICard
+          title="Production Today"
+          value={`${stats.production_today?.toLocaleString() || "0"} units`}
+          icon={<Factory size={20} />}
+        />
+        <KPICard
+          title="Raw Material Value"
+          value={`Rs. ${stats.raw_material_value?.toLocaleString() || "0"}`}}
+          icon={<Truck size={20} />}
+        />
+        <KPICard
+          title="Orders Delayed"
+          value={stats.orders_delayed || 0}
+          change="+2"
+          trend="up"
+          icon={<AlertCircle size={20} />}
+        />
+        <KPICard
+          title="Finished Goods"
+          value={`${stats.finished_goods?.toLocaleString() || "0"} units`}
+          icon={<Clock size={20} />}
+        />
+        <KPICard
+          title="Quality Rejections"
+          value={`${stats.quality_rejection_rate || 0}%`}
+          change="-0.4%"
+          trend="down"
+          icon={<Shield size={20} />}
+        />
+        <KPICard
+          title="Actual Unit Cost"
+          value={`Rs. ${stats.actual_unit_cost || 0}`}
+          icon={<CreditCard size={20} />}
+        />
       </div>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-6 rounded-xl border shadow-sm">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Quick Actions</h3>
-          <div className="space-y-3">
-            <button className="w-full px-4 py-3 text-left bg-blue-50 border border-blue-100 rounded-lg text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors">
+        <Card className="p-6">
+          <CardHeader>
+            <CardTitle>Quick Actions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Link
+              href="/production-orders"
+              className="w-full px-4 py-3 text-left bg-factory-50 border border-factory-100 rounded-lg text-sm font-medium text-factory-700 hover:bg-factory-100 transition-colors"
+            >
               New Production Order
-            </button>
-            <button className="w-full px-4 py-3 text-left bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+            </Link>
+            <Link
+              href="/purchase-orders"
+              className="w-full px-4 py-3 text-left border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
               Create Purchase Order
-            </button>
-            <button className="w-full px-4 py-3 text-left bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+            </Link>
+            <Link
+              href="/quality/inspections"
+              className="w-full px-4 py-3 text-left border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
               Record Quality Inspection
-            </button>
-            <button className="w-full px-4 py-3 text-left bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+            </Link>
+            <Link
+              href="/accounting/journal-entries"
+              className="w-full px-4 py-3 text-left border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
               Post Journal Entry
-            </button>
-          </div>
-        </div>
+            </Link>
+          </CardContent>
+        </Card>
+
+        {/* Recent Activity */}
+        <Card className="p-6">
+          <CardHeader>
+            <CardTitle>Recent Activity</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
+              <div className="text-sm">
+                <p className="text-gray-900">GRN-0001 received</p>
+                <p className="text-xs text-gray-500">Cotton Fabric — 500 meters</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
+              <div className="text-sm">
+                <p className="text-gray-900">PO-2026-001 approved</p>
+                <p className="text-xs text-gray-500">Textile Mills Ltd — Rs. 125,000</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2"></div>
+              <div className="text-sm">
+                <p className="text-gray-900">Quality inspection pending</p>
+                <p className="text-xs text-gray-500">Production order PO-2026-003</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
-    </div>
+    </AppLayout>
   );
 }

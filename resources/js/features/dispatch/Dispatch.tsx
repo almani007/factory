@@ -2,47 +2,52 @@
  * Brixel FactoryOS — Dispatch Page
  * Dispatch orders and delivery tracking.
  */
-import { Head } from '@inertiajs/react';
-import { Plus, Truck, Monitor } from 'lucide.react';
+
+import { Head, Link, usePage } from "@inertiajs/react";
+import { AppLayout } from "@/components/layout";
+import { PageHeader } from "@/components/layout";
+import { DataTable } from "@/components/DataTable";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+interface Dispatch {
+  id: number;
+  dispatch_number: string;
+  sales_order_id: string;
+  driver_name: string;
+  dispatch_date: string;
+  status: string;
+}
 
 export default function Dispatch() {
-  return (
-    <div>
-      <Head title="Dispatch — Brixel FactoryOS" />
-      <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dispatch & Logistics</h1>
-          <p className="text-gray-600">Delivery planning, dispatch orders, and proof of delivery</p>
-        </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-          <Plus size={16} /> New Dispatch
-        </button>
-      </div>
+  const { data } = usePage() as any;
+  const dispatches: Dispatch[] = data?.dispatches?.data || [];
+  const meta = data?.dispatches?.meta || {};
 
-      <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Dispatch #</th>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">SO #</th>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Driver</th>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 text-sm font-mono text-gray-900">DISP-001</td>
-              <td className="px-6 py-4 text-sm text-gray-900">SO-2026-001</td>
-              <td className="px-6 py-4 text-sm text-gray-600">Ahmed Khan</td>
-              <td className="px-6 py-4 text-sm text-gray-600">2026-11-09</td>
-              <td className="px-6 py-4">
-                <span className="px-2 py-1 text-xs font-semibold bg-blue-100 text-blue-700 rounded">In Transit</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+  return (
+    <AppLayout title="Dispatch & Logistics">
+      <PageHeader
+        title="Dispatch & Logistics"
+        subtitle="Delivery planning, dispatch orders, and proof of delivery"
+      >
+        <Button className="bg-factory-600 text-white hover:bg-factory-500">
+          <Plus size={16} /> New Dispatch
+        </Button>
+      </PageHeader>
+
+      <DataTable
+        title="Dispatches"
+        columns={[
+          { key: "dispatch_number", label: "Dispatch #" },
+          { key: "sales_order_id", label: "SO #" },
+          { key: "driver_name", label: "Driver" },
+          { key: "dispatch_date", label: "Date" },
+          { key: "status", label: "Status" },
+        ]}
+        data={dispatches}
+        createUrl="/dispatches/create"
+        meta={meta}
+      />
+    </AppLayout>
   );
 }

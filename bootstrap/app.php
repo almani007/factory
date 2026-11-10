@@ -1,5 +1,6 @@
 <?php
 
+use Inertia\Middleware;
 use Tenancy\Infrastructure\Http\Middleware\TenantContextMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -14,6 +15,14 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->append(TenantContextMiddleware::class);
+
+        // Inertia middleware stack
+        $middleware->web(append: [
+            \App\Http\Middleware\HandleInertiaRequests::class,
+            \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
+        ]);
+
+        // Inertia SSR middleware
         $middleware->statefulApi();
     })
     ->withExceptions(function (Exceptions $exceptions) {

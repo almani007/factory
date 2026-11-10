@@ -12,11 +12,12 @@
   },
   "devDependencies": {
     "@inertiajs/react": "^2.0",
-    "@tailwindcss/forms": "^0.5",
+    "@tailwindcss/vite": "^4.0",
     "@vitejs/plugin-react": "^4.5",
     "autoprefixer": "^10.4",
     "class-variance-authority": "^0.7",
     "clsx": "^2.1",
+    "laravel-vite-plugin": "^1.0",
     "lucide-react": "^0.469",
     "postcss": "^8.4",
     "react": "^19.0",

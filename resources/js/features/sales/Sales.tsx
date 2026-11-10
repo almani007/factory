@@ -2,47 +2,52 @@
  * Brixel FactoryOS — Sales Page
  * Customers and sales orders.
  */
-import { Head } from '@inertiajs/react';
-import { Plus, CreditCard, Search } from 'lucide-react';
+
+import { Head, Link, usePage } from "@inertiajs/react";
+import { AppLayout } from "@/components/layout";
+import { PageHeader } from "@/components/layout";
+import { DataTable } from "@/components/DataTable";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+interface Customer {
+  id: number;
+  name: string;
+  code: string;
+  contact_person: string;
+  email: string;
+  credit_limit: number;
+}
 
 export default function Sales() {
-  return (
-    <div>
-      <Head title="Sales — Brixel FactoryOS" />
-      <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Sales & Orders</h1>
-          <p className="text-gray-600">Customers, sales orders, and order tracking</p>
-        </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
-          <Plus size={16} /> New Sales Order
-        </button>
-      </div>
+  const { data } = usePage() as any;
+  const customers: Customer[] = data?.customers?.data || [];
+  const meta = data?.customers?.meta || {};
 
-      <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">SO #</th>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Customer</th>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase text-right">Amount</th>
-              <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            <tr className="hover:bg-gray-50">
-              <td className="px-6 py-4 text-sm font-mono text-gray-900">SO-2026-001</td>
-              <td className="px-6 py-4 text-sm text-gray-900">Garment Exports Co</td>
-              <td className="px-6 py-4 text-sm text-gray-600">2026-11-05</td>
-              <td className="px-6 py-4 text-sm text-right text-gray-600">Rs. 185,000</td>
-              <td className="px-6 py-4">
-                <span className="px-2 py-1 text-xs font-semibold bg-blue-100 text-blue-700 rounded">Confirmed</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+  return (
+    <AppLayout title="Sales & Orders">
+      <PageHeader
+        title="Sales & Orders"
+        subtitle="Customers, sales orders, and order tracking"
+      >
+        <Button className="bg-factory-600 text-white hover:bg-factory-500">
+          <Plus size={16} /> New Sales Order
+        </Button>
+      </PageHeader>
+
+      <DataTable
+        title="Customers"
+        columns={[
+          { key: "name", label: "Customer" },
+          { key: "code", label: "Code" },
+          { key: "contact_person", label: "Contact" },
+          { key: "email", label: "Email" },
+          { key: "credit_limit", label: "Credit Limit" },
+        ]}
+        data={customers}
+        createUrl="/customers/create"
+        meta={meta}
+      />
+    </AppLayout>
   );
 }

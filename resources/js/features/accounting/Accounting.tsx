@@ -2,40 +2,74 @@
  * Brixel FactoryOS — Accounting Page
  * Journal entries and financial reports.
  */
-import { Head } from '@inertiajs/react';
-import { Plus, CreditCard, BarChart, Search } from 'lucide.react';
+
+import { Head, Link, usePage } from "@inertiajs/react";
+import { AppLayout } from "@/components/layout";
+import { PageHeader } from "@/components/layout";
+import { DataTable } from "@/components/DataTable";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { KPICard } from "@/components/KPICard";
 
 export default function Accounting() {
+  const { data } = usePage() as any;
+  const journalEntries = data?.journal_entries?.data || [];
+  const meta = data?.journal_entries?.meta || {};
+
   return (
-    <div>
-      <Head title="Accounting — Brixel FactoryOS" />
-      <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Accounting & Finance</h1>
-          <p className="text-gray-600">Double-entry ledger, journal entries, and financial reports</p>
-        </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+    <AppLayout title="Accounting & Finance">
+      <PageHeader
+        title="Accounting & Finance"
+        subtitle="Double-entry ledger, journal entries, and financial reports"
+      >
+        <Button className="bg-factory-600 text-white hover:bg-factory-500">
           <Plus size={16} /> New Journal Entry
-        </button>
-      </div>
+        </Button>
+      </PageHeader>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-white p-6 rounded-xl border shadow-sm">
-          <p className="text-xs text-gray-500 uppercase">Trial Balance</p>
-          <p className="text-2xl font-bold">Rs. 2.1M</p>
-          <p className="text-xs text-green-600 mt-1">Balanced</p>
-        </div>
-        <div className="bg-white p-6 rounded-xl border shadow-sm">
-          <p className="text-xs text-gray-500 uppercase">Accounts Receivable</p>
-          <p className="text-2xl font-bold">Rs. 480,000</p>
-          <p className="text-xs text-gray-600 mt-1">Outstanding</p>
-        </div>
-        <div className="bg-white p-6 rounded-xl border shadow-sm">
-          <p className="text-xs text-gray-500 uppercase">Accounts Payable</p>
-          <p className="text-2xl font-bold">Rs. 133,500</p>
-          <p className="text-xs text-gray-600 mt-1">Outstanding</p>
-        </div>
+        <Card className="p-6">
+          <CardHeader>
+            <CardTitle>Trial Balance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-gray-900">Rs. 2.1M</p>
+            <p className="text-xs text-green-600 mt-1">Balanced</p>
+          </CardContent>
+        </Card>
+        <Card className="p-6">
+          <CardHeader>
+            <CardTitle>Accounts Receivable</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-gray-900">Rs. 480,000</p>
+            <p className="text-xs text-gray-600 mt-1">Outstanding</p>
+          </CardContent>
+        </Card>
+        <Card className="p-6">
+          <CardHeader>
+            <CardTitle>Accounts Payable</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-gray-900">Rs. 133,500</p>
+            <p className="text-xs text-gray-600 mt-1">Outstanding</p>
+          </CardContent>
+        </Card>
       </div>
-    </div>
+
+      <DataTable
+        title="Journal Entries"
+        columns={[
+          { key: "reference", label: "Reference" },
+          { key: "document_date", label: "Date" },
+          { key: "status", label: "Status" },
+          { key: "description", label: "Description" },
+        ]}
+        data={journalEntries}
+        createUrl="/accounting/journal-entries/create"
+        meta={meta}
+      />
+    </AppLayout>
   );
 }

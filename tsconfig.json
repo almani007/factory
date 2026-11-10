@@ -20,9 +20,11 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["resources/js/*"],
-      "@modules/*": ["resources/js/modules/*"],
       "@components/*": ["resources/js/components/*"],
-      "@layouts/*": ["resources/js/layouts/*"]
+      "@features/*": ["resources/js/features/*"],
+      "@layouts/*": ["resources/js/layouts/*"],
+      "@modules/*": ["resources/js/modules/*"],
+      "@lib/*": ["resources/js/lib/*"]
     },
     "include": ["resources/js/**/*"],
     "exclude": ["node_modules", "dist", "build"]
