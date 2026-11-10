@@ -2,6 +2,7 @@ import * as React from "react";
 /**
  * Brixel FactoryOS — DataTable
  * Server-driven table: Inertia visits handle search, sorting and pagination.
+ * Professional styling with zebra rows, status badges, and clean typography.
  */
 
 import { Head, Link, router, usePage } from "@inertiajs/react";
@@ -34,40 +35,40 @@ interface DataTableProps<T extends Record<string, any>> {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  active: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  posted: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  completed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  closed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  approved: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  released: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  confirmed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  delivered: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  passed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  pending: "bg-amber-50 text-amber-700 ring-amber-200",
-  pending_approval: "bg-amber-50 text-amber-700 ring-amber-200",
-  submitted: "bg-amber-50 text-amber-700 ring-amber-200",
-  partially_accepted: "bg-amber-50 text-amber-700 ring-amber-200",
-  rework_required: "bg-amber-50 text-amber-700 ring-amber-200",
-  draft: "bg-slate-100 text-slate-600 ring-slate-200",
-  inactive: "bg-slate-100 text-slate-500 ring-slate-200",
-  suspended: "bg-slate-100 text-slate-500 ring-slate-200",
-  in_progress: "bg-sky-50 text-sky-700 ring-sky-200",
-  in_production: "bg-sky-50 text-sky-700 ring-sky-200",
-  in_transit: "bg-sky-50 text-sky-700 ring-sky-200",
-  material_reserved: "bg-sky-50 text-sky-700 ring-sky-200",
-  quality_inspection: "bg-indigo-50 text-indigo-700 ring-indigo-200",
-  rejected: "bg-rose-50 text-rose-700 ring-rose-200",
-  cancelled: "bg-rose-50 text-rose-700 ring-rose-200",
-  failed: "bg-rose-50 text-rose-700 ring-rose-200",
+  active: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
+  posted: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
+  completed: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
+  closed: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
+  approved: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
+  released: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
+  confirmed: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
+  delivered: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
+  passed: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
+  pending: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
+  pending_approval: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
+  submitted: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
+  partially_accepted: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
+  rework_required: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
+  draft: "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200",
+  inactive: "bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-200",
+  suspended: "bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-200",
+  in_progress: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200",
+  in_production: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200",
+  in_transit: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200",
+  material_reserved: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200",
+  quality_inspection: "bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200",
+  rejected: "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200",
+  cancelled: "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200",
+  failed: "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200",
 };
 
 function StatusBadge({ value }: { value: string }) {
-  const style = STATUS_STYLES[value] || "bg-slate-100 text-slate-600 ring-slate-200";
+  const style = STATUS_STYLES[value] || "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200";
 
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ring-1 ring-inset",
+        "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize",
         style
       )}
     >
@@ -108,7 +109,6 @@ export function DataTable<T extends Record<string, any>>({
     });
 
     const suffix = next.toString();
-
     return suffix ? `${basePath}?${suffix}` : basePath;
   };
 
@@ -132,8 +132,8 @@ export function DataTable<T extends Record<string, any>>({
     <div className={className}>
       <Head title={`${title} — Brixel FactoryOS`} />
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all">
+        <div className="flex flex-col gap-3 border-b border-slate-200/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-base font-semibold tracking-tight text-slate-900">{title}</h2>
             <p className="mt-0.5 text-xs text-slate-500">
@@ -153,14 +153,14 @@ export function DataTable<T extends Record<string, any>>({
                 name="q"
                 defaultValue={query}
                 placeholder="Search…"
-                className="h-9 w-52 rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-sky-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                className="h-9 w-52 rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-factory-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-factory-500"
               />
             </form>
 
             {createUrl && (
               <Link
                 href={createUrl}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-sky-600 px-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-sky-700"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-factory-600 px-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-factory-700"
               >
                 <Plus size={15} />
                 New
@@ -179,11 +179,7 @@ export function DataTable<T extends Record<string, any>>({
                     onClick={col.sortable ? () => sortBy(col.key) : undefined}
                     className={cn(
                       "whitespace-nowrap px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500",
-                      col.align === "right"
-                        ? "text-right"
-                        : col.align === "center"
-                          ? "text-center"
-                          : "text-left",
+                      col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left",
                       col.sortable && "cursor-pointer select-none hover:text-slate-700"
                     )}
                   >
@@ -193,7 +189,7 @@ export function DataTable<T extends Record<string, any>>({
                         <ChevronDown
                           size={12}
                           className={cn("text-slate-400", {
-                            "text-sky-600": sortField === col.key,
+                            "text-factory-600": sortField === col.key,
                             "rotate-180": sortField === col.key && sortDir === "desc",
                           })}
                         />
@@ -225,11 +221,7 @@ export function DataTable<T extends Record<string, any>>({
                           key={col.key}
                           className={cn(
                             "whitespace-nowrap px-5 py-3 text-slate-700",
-                            col.align === "right"
-                              ? "text-right"
-                              : col.align === "center"
-                                ? "text-center"
-                                : "text-left"
+                            col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"
                           )}
                         >
                           {col.format ? (
@@ -250,7 +242,7 @@ export function DataTable<T extends Record<string, any>>({
         </div>
 
         {meta && (
-          <div className="flex flex-col gap-3 border-t border-slate-200 px-5 py-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 border-t border-slate-200/60 px-5 py-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
             <p>
               Showing <span className="font-medium text-slate-700">{meta.from ?? 0}</span>–
               <span className="font-medium text-slate-700">{meta.to ?? 0}</span> of{" "}

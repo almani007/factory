@@ -1,10 +1,11 @@
 import * as React from "react";
 /**
  * Brixel FactoryOS — Layout Components
- * Application shell: fixed top bar, grouped sidebar, content canvas.
+ * Enterprise SaaS shell: glass top bar, grouped sidebar, content canvas with mesh background.
  */
 
 import { Head, Link, router, usePage } from "@inertiajs/react";
+import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
   Package,
@@ -15,7 +16,6 @@ import {
   ShoppingCart,
   Send,
   BookOpen,
-  Building2,
   Settings,
   Menu,
   X,
@@ -53,7 +53,7 @@ const NAV_GROUPS = [
   {
     label: "Administration",
     items: [
-      { name: "Tenancy", href: "/tenancy", icon: Building2 },
+      { name: "Tenancy", href: "/tenancy", icon: Settings },
       { name: "Settings", href: "/settings", icon: Settings },
     ],
   },
@@ -95,29 +95,29 @@ export function AppLayout({ children, title }: AppLayoutProps) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100/70 text-slate-900">
+    <div className="min-h-screen shell-bg text-slate-900">
       <Head title={title ? `${title} — Brixel FactoryOS` : "Brixel FactoryOS"} />
 
-      {/* Top bar */}
-      <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/90 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/75 lg:px-6">
+      {/* Top bar — glass */}
+      <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center gap-3 border-b border-slate-200/60 bg-white/70 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-white/75 lg:px-6 shadow-sm shadow-slate-200/30">
         <button
           type="button"
           onClick={() => setMobileOpen(true)}
-          className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 lg:hidden"
+          className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 lg:hidden transition-colors"
           aria-label="Open navigation"
         >
           <Menu size={20} />
         </button>
 
         <Link href="/dashboard" className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-sky-700 text-sm font-bold text-white shadow-sm shadow-sky-600/20">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-factory-500 to-factory-700 text-sm font-bold text-white shadow-sm shadow-factory-500/25">
             B
           </span>
           <span className="hidden flex-col leading-none sm:flex">
             <span className="text-[15px] font-semibold tracking-tight text-slate-900">
               Brixel FactoryOS
             </span>
-            <span className="mt-1 text-[11px] font-medium uppercase tracking-wider text-slate-400">
+            <span className="mt-1 text-[11px] font-medium uppercase tracking-wider text-factory-600">
               Manufacturing ERP
             </span>
           </span>
@@ -139,7 +139,7 @@ export function AppLayout({ children, title }: AppLayoutProps) {
 
           <button
             type="button"
-            className="relative rounded-lg p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            className="relative rounded-lg p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
             aria-label="Notifications"
           >
             <Bell size={19} />
@@ -153,7 +153,7 @@ export function AppLayout({ children, title }: AppLayoutProps) {
                 {currentUser.role?.replace(/_/g, " ")}
               </span>
             </div>
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white shadow-md">
               {initials || "A"}
             </span>
           </div>
@@ -166,14 +166,14 @@ export function AppLayout({ children, title }: AppLayoutProps) {
           type="button"
           aria-label="Close navigation"
           onClick={() => setMobileOpen(false)}
-          className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm lg:hidden transition-opacity"
         />
       )}
 
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed bottom-0 left-0 top-16 z-50 w-64 border-r border-slate-200 bg-white transition-transform duration-200 ease-out lg:translate-x-0",
+          "fixed bottom-0 left-0 top-16 z-50 w-64 border-r border-slate-200 bg-white/80 backdrop-blur-sm transition-transform duration-300 ease-out lg:translate-x-0",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -194,9 +194,9 @@ export function AppLayout({ children, title }: AppLayoutProps) {
                         href={item.href}
                         onClick={() => setMobileOpen(false)}
                         className={cn(
-                          "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                          "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
                           active
-                            ? "bg-sky-50 text-sky-700"
+                            ? "bg-factory-50 text-factory-700 ring-1 ring-inset ring-factory-200/60"
                             : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                         )}
                       >
@@ -204,12 +204,12 @@ export function AppLayout({ children, title }: AppLayoutProps) {
                           size={17}
                           strokeWidth={2}
                           className={cn(
-                            active ? "text-sky-600" : "text-slate-400 group-hover:text-slate-600"
+                            active ? "text-factory-600" : "text-slate-400 group-hover:text-slate-600"
                           )}
                         />
                         <span className="truncate">{item.name}</span>
                         {active && (
-                          <span className="ml-auto h-1.5 w-1.5 rounded-full bg-sky-500" />
+                          <span className="ml-auto h-1.5 w-1.5 rounded-full bg-factory-600" />
                         )}
                       </Link>
                     );
@@ -220,8 +220,8 @@ export function AppLayout({ children, title }: AppLayoutProps) {
           </nav>
 
           <div className="border-t border-slate-200 p-3">
-            <div className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-xs font-semibold text-sky-700">
+            <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-inset ring-slate-200/60">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-factory-100 text-xs font-semibold text-factory-700">
                 {initials || "AD"}
               </span>
               <div className="min-w-0">
@@ -250,14 +250,36 @@ interface PageHeaderProps {
   subtitle?: string;
   actions?: React.ReactNode;
   children?: React.ReactNode;
+  breadcrumbs?: Array<{ label: string; href?: string }>;
 }
 
-export function PageHeader({ title, subtitle, actions, children }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, actions, children, breadcrumbs }: PageHeaderProps) {
   const aside = actions ?? children;
 
   return (
-    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
+    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="min-w-0 flex flex-col gap-1">
+        {breadcrumbs && breadcrumbs.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-slate-400">
+            {breadcrumbs.map((item, index) => (
+              <React.Fragment key={item.label || index}>
+                {index > 0 && (
+                  <span className="mx-1 text-slate-300">/</span>
+                )}
+                {item.href ? (
+                  <Link
+                    href={item.href}
+                    className="text-slate-500 hover:text-factory-600 transition-colors"
+                  >
+                    {item.label}
+                  </Link>
+                ) : (
+                  <span className="text-slate-600">{item.label}</span>
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+        )}
         <h1 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
           {title}
         </h1>
