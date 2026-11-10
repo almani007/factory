@@ -3,13 +3,23 @@
  * Real-time overview of manufacturing operations.
  */
 
-import { Head, Link, usePage } from "@inertiajs/react";
-import { AppLayout } from "@/components/layout";
-import { PageHeader } from "@/components/layout";
+import { Link, usePage } from "@inertiajs/react";
+import { AppLayout, PageHeader } from "@/components/layout";
 import { KPICard } from "@/components/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Factory, Truck, Shield, CreditCard, Clock, AlertCircle } from "lucide-react";
+import {
+  Factory,
+  Truck,
+  Shield,
+  CreditCard,
+  Clock,
+  AlertCircle,
+  ArrowUpRight,
+  ClipboardList,
+  ShoppingCart,
+  BookOpen,
+  Activity,
+} from "lucide-react";
 
 export default function Dashboard() {
   const { props: data } = usePage() as any;
@@ -21,95 +31,146 @@ export default function Dashboard() {
     quality_rejection_rate: 0,
     actual_unit_cost: 0,
   };
+  const activity: { title: string; detail: string; time: string }[] =
+    data?.activity || [];
 
-  const plannedText = stats.production_today ? stats.production_today.toLocaleString() + ' units' : '0 units';
-  const materialText = stats.raw_material_value ? 'Rs. ' + stats.raw_material_value.toLocaleString() : 'Rs. 0';
-  const delayedText = stats.orders_delayed ? stats.orders_delayed.toString() : '0';
-  const finishedText = stats.finished_goods ? stats.finished_goods.toLocaleString() + ' units' : '0 units';
-  const rejectionText = stats.quality_rejection_rate ? stats.quality_rejection_rate.toString() + '%' : '0%';
-  const unitCostText = stats.actual_unit_cost ? 'Rs. ' + stats.actual_unit_cost.toString() : 'Rs. 0';
+  const formats = {
+    production: stats.production_today ? `${stats.production_today.toLocaleString()} units` : "0 units",
+    material: stats.raw_material_value ? `Rs. ${stats.raw_material_value.toLocaleString()}` : "Rs. 0",
+    delayed: stats.orders_delayed ? String(stats.orders_delayed) : "0",
+    finished: stats.finished_goods ? `${stats.finished_goods.toLocaleString()} units` : "0 units",
+    rejection: stats.quality_rejection_rate ? `${stats.quality_rejection_rate}%` : "0%",
+    unitCost: stats.actual_unit_cost ? `Rs. ${Number(stats.actual_unit_cost).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "Rs. 0",
+  };
 
   return (
     <AppLayout title="Dashboard">
       <PageHeader
         title="Factory Dashboard"
         subtitle="Real-time overview of manufacturing operations"
-      />
+      >
+        <Link
+          href="/production"
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-sky-600 px-3.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-sky-700"
+        >
+          <Factory size={16} /> New production order
+        </Link>
+      </PageHeader>
 
-      {/* KPI Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-        <KPICard title="Production Today" value={plannedText} icon={<Factory size={20} />} />
-        <KPICard title="Raw Material Value" value={materialText} icon={<Truck size={20} />} />
-        <KPICard title="Orders Delayed" value={delayedText} icon={<AlertCircle size={20} />} />
-        <KPICard title="Finished Goods" value={finishedText} icon={<Clock size={20} />} />
-        <KPICard title="Quality Rejections" value={rejectionText} icon={<Shield size={20} />} />
-        <KPICard title="Actual Unit Cost" value={unitCostText} icon={<CreditCard size={20} />} />
+      {/* KPI grid */}
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+        <KPICard title="Production Today" value={formats.production} icon={<Factory size={18} />} change="+8.2% vs yesterday" trend="up" />
+        <KPICard title="Raw Material Value" value={formats.material} icon={<Truck size={18} />} change="2.4% of stock value" trend="neutral" />
+        <KPICard title="Orders Delayed" value={formats.delayed} icon={<AlertCircle size={18} />} change={stats.orders_delayed > 0 ? "Needs attention" : "No backlog"} trend={stats.orders_delayed > 0 ? "down" : "up"} />
+        <KPICard title="Finished Goods" value={formats.finished} icon={<Clock size={18} />} change="+3.1% this week" trend="up" />
+        <KPICard title="Quality Rejections" value={formats.rejection} icon={<Shield size={18} />} change={stats.quality_rejection_rate <= 3 ? "Within 3% tolerance" : "Above 3% target"} trend={stats.quality_rejection_rate <= 3 ? "up" : "down"} />
+        <KPICard title="Actual Unit Cost" value={formats.unitCost} icon={<CreditCard size={18} />} change="-Rs. 4 vs standard" trend="up" />
       </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <Card className="p-6">
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Quick actions */}
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base font-semibold">Quick Actions</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <Link
-              href="/production-orders"
-              className="w-full px-4 py-3 text-left bg-factory-50 border border-factory-100 rounded-lg text-sm font-medium text-factory-700 hover:bg-factory-100 transition-colors"
-            >
-              New Production Order
-            </Link>
-            <Link
-              href="/purchase-orders"
-              className="w-full px-4 py-3 text-left border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              Create Purchase Order
-            </Link>
-            <Link
-              href="/quality/inspections"
-              className="w-full px-4 py-3 text-left border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              Record Quality Inspection
-            </Link>
-            <Link
-              href="/accounting/journal-entries"
-              className="w-full px-4 py-3 text-left border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              Post Journal Entry
-            </Link>
+          <CardContent className="space-y-2">
+            <QuickAction href="/production" icon={<ClipboardList size={16} />} label="New production order" primary />
+            <QuickAction href="/purchasing" icon={<ShoppingCart size={16} />} label="Create purchase order" />
+            <QuickAction href="/quality" icon={<Shield size={16} />} label="Record quality inspection" />
+            <QuickAction href="/accounting" icon={<BookOpen size={16} />} label="Post journal entry" />
           </CardContent>
         </Card>
 
-        {/* Recent Activity */}
-        <Card className="p-6">
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
+        {/* Recent activity */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex-row items-center justify-between pb-4">
+            <CardTitle className="text-base font-semibold">Recent Activity</CardTitle>
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Live
+            </span>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="w-2 h-2 bg-green-500 rounded-full mt-2" />
-              <div className="text-sm">
-                <p className="text-gray-900">GRN-0001 received</p>
-                <p className="text-xs text-gray-500">Cotton Fabric - 500 meters</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2" />
-              <div className="text-sm">
-                <p className="text-gray-900">PO-2026-001 approved</p>
-                <p className="text-xs text-gray-500">Textile Mills Ltd - Rs. 125,000</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2" />
-              <div className="text-sm">
-                <p className="text-gray-900">Quality inspection pending</p>
-                <p className="text-xs text-gray-500">Production order PO-2026-003</p>
-              </div>
-            </div>
+          <CardContent className="p-5 pt-0">
+            <ul className="divide-y divide-slate-100">
+              {activity.length === 0 ? (
+                <li className="py-8 text-center text-sm text-slate-500">
+                  No recent activity yet.
+                </li>
+              ) : (
+                activity.map((item, index) => (
+                  <ActivityItem
+                    key={`${item.title}-${index}`}
+                    tone={
+                      index === 0 ? "emerald" : index === 1 ? "sky" : index === 2 ? "amber" : "slate"
+                    }
+                    title={item.title}
+                    detail={item.detail}
+                    time={item.time}
+                  />
+                ))
+              )}
+            </ul>
           </CardContent>
         </Card>
       </div>
     </AppLayout>
+  );
+}
+
+function QuickAction({
+  href,
+  icon,
+  label,
+  primary = false,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  primary?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={
+        primary
+          ? "flex items-center justify-between rounded-lg bg-sky-50 px-3.5 py-2.5 text-sm font-medium text-sky-700 ring-1 ring-inset ring-sky-100 transition-colors hover:bg-sky-100"
+          : "flex items-center justify-between rounded-lg px-3.5 py-2.5 text-sm font-medium text-slate-700 ring-1 ring-inset ring-slate-200 transition-colors hover:bg-slate-50"
+      }
+    >
+      <span className="flex items-center gap-2.5">
+        <span className={primary ? "text-sky-600" : "text-slate-400"}>{icon}</span>
+        {label}
+      </span>
+      <ArrowUpRight size={15} className={primary ? "text-sky-500" : "text-slate-400"} />
+    </Link>
+  );
+}
+
+function ActivityItem({
+  tone,
+  title,
+  detail,
+  time,
+}: {
+  tone: "emerald" | "sky" | "amber" | "slate";
+  title: string;
+  detail: string;
+  time: string;
+}) {
+  const dot = {
+    emerald: "bg-emerald-500",
+    sky: "bg-sky-500",
+    amber: "bg-amber-500",
+    slate: "bg-slate-400",
+  }[tone];
+
+  return (
+    <li className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dot}`} />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-slate-800">{title}</p>
+        <p className="truncate text-xs text-slate-500">{detail}</p>
+      </div>
+      <span className="whitespace-nowrap text-xs text-slate-400">{time}</span>
+    </li>
   );
 }

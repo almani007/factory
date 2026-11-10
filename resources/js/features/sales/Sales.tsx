@@ -7,6 +7,7 @@ import { Head, Link, usePage } from "@inertiajs/react";
 import { AppLayout } from "@/components/layout";
 import { PageHeader } from "@/components/layout";
 import { DataTable } from "@/components/DataTable";
+import { StatStrip } from "@/components/StatStrip";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -23,6 +24,11 @@ export default function Sales() {
   const { props: data } = usePage() as any;
   const customers: Customer[] = data?.customers?.data || [];
   const meta = data?.customers?.meta || {};
+  const summary = data?.sales_summary || {
+    total: 0,
+    open_orders: 0,
+    receivable: "Rs. 0",
+  };
 
   return (
     <AppLayout title="Sales & Orders">
@@ -30,10 +36,18 @@ export default function Sales() {
         title="Sales & Orders"
         subtitle="Customers, sales orders, and order tracking"
       >
-        <Button className="bg-factory-600 text-white hover:bg-factory-500">
+        <Button>
           <Plus size={16} /> New Sales Order
         </Button>
       </PageHeader>
+
+      <StatStrip
+        items={[
+          { label: "Customers", value: summary.total, hint: "Active accounts" },
+          { label: "Open sales orders", value: summary.open_orders, hint: "Awaiting fulfilment", tone: "warning" },
+          { label: "Receivables", value: summary.receivable, hint: "Outstanding invoices", tone: "danger" },
+        ]}
+      />
 
       <DataTable
         title="Customers"
@@ -45,7 +59,6 @@ export default function Sales() {
           { key: "credit_limit", label: "Credit Limit" },
         ]}
         data={customers}
-        createUrl="/customers/create"
         meta={meta}
       />
     </AppLayout>

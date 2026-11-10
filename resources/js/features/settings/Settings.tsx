@@ -21,15 +21,15 @@ export default function Settings() {
         title="Settings"
         subtitle="Company profile, localisation and manufacturing defaults"
       >
-        <Button className="bg-factory-600 text-white hover:bg-factory-500">
+        <Button>
           <Save size={16} /> Save Changes
         </Button>
       </PageHeader>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle>Company Profile</CardTitle>
+          <CardHeader className="p-5 pb-2">
+            <CardTitle className="text-base font-semibold text-slate-900">Company Profile</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <Field label="Company Name" value={tenant.company_name || ""} placeholder="Acme Manufacturing" />
@@ -40,8 +40,8 @@ export default function Settings() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Localisation</CardTitle>
+          <CardHeader className="p-5 pb-2">
+            <CardTitle className="text-base font-semibold text-slate-900">Localisation</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <Field label="Currency" value={settings.currency || "PKR"} placeholder="PKR" />
@@ -52,8 +52,8 @@ export default function Settings() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Manufacturing Defaults</CardTitle>
+          <CardHeader className="p-5 pb-2">
+            <CardTitle className="text-base font-semibold text-slate-900">Manufacturing Defaults</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <Field label="Default Warehouse" value={settings.default_warehouse || ""} placeholder="Main Store" />
@@ -64,8 +64,8 @@ export default function Settings() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Notifications</CardTitle>
+          <CardHeader className="p-5 pb-2">
+            <CardTitle className="text-base font-semibold text-slate-900">Notifications</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <Field label="Low Stock Alerts" value={settings.low_stock_alerts || "enabled"} placeholder="enabled" />
@@ -90,12 +90,12 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-gray-700">{label}</span>
+      <span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>
       <input
         type="text"
         defaultValue={value}
         placeholder={placeholder}
-        className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-factory-500 focus:outline-none focus:ring-2 focus:ring-factory-500/30"
+        className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-factory-500 focus:outline-none focus:ring-2 focus:ring-factory-500/30"
       />
     </label>
   );

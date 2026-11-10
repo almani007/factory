@@ -26,6 +26,11 @@ export default function Inventory() {
   const { props: data } = usePage() as any;
   const movements: InventoryMovement[] = data?.movements?.data || [];
   const meta = data?.movements?.meta || {};
+  const summary = data?.inventory_summary || {
+    on_hand: "0",
+    value: "Rs. 0",
+    low_stock: 0,
+  };
 
   const columns = [
     { key: "reference", label: "Reference" },
@@ -43,37 +48,37 @@ export default function Inventory() {
         title="Inventory Management"
         subtitle="Stock movements, balances, and warehouse operations"
       >
-        <Button className="bg-factory-600 text-white hover:bg-factory-500">
+        <Button>
           <Plus size={16} /> New Movement
         </Button>
       </PageHeader>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <Card className="p-4">
-          <CardHeader>
-            <CardTitle>Available Stock</CardTitle>
+        <Card>
+          <CardHeader className="p-5 pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Available Stock</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-gray-900">1,240 items</p>
-            <p className="text-xs text-gray-500">Across all warehouses</p>
+          <CardContent className="p-5 pt-0">
+            <p className="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums">{summary.on_hand} units</p>
+            <p className="text-xs text-slate-500">Across all warehouses</p>
           </CardContent>
         </Card>
-        <Card className="p-4">
-          <CardHeader>
-            <CardTitle>Low Stock Alerts</CardTitle>
+        <Card>
+          <CardHeader className="p-5 pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Low Stock Alerts</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-red-600">3</p>
-            <p className="text-xs text-gray-500">Items below reorder level</p>
+          <CardContent className="p-5 pt-0">
+            <p className="text-2xl font-semibold tracking-tight text-rose-600 tabular-nums">{summary.low_stock}</p>
+            <p className="text-xs text-slate-500">Items below reorder level</p>
           </CardContent>
         </Card>
-        <Card className="p-4">
-          <CardHeader>
-            <CardTitle>Stock Value</CardTitle>
+        <Card>
+          <CardHeader className="p-5 pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Stock Value</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-gray-900">Rs. 4.2M</p>
-            <p className="text-xs text-gray-500">Total inventory value</p>
+          <CardContent className="p-5 pt-0">
+            <p className="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums">{summary.value}</p>
+            <p className="text-xs text-slate-500">Total inventory value</p>
           </CardContent>
         </Card>
       </div>
@@ -82,7 +87,6 @@ export default function Inventory() {
         title="Stock Movements"
         columns={columns}
         data={movements}
-        createUrl="/inventory/movements/create"
         meta={meta}
       />
     </AppLayout>

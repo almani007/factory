@@ -7,6 +7,7 @@ import { Head, Link, usePage } from "@inertiajs/react";
 import { AppLayout } from "@/components/layout";
 import { PageHeader } from "@/components/layout";
 import { DataTable } from "@/components/DataTable";
+import { StatStrip } from "@/components/StatStrip";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -23,6 +24,11 @@ export default function Dispatch() {
   const { props: data } = usePage() as any;
   const dispatches: Dispatch[] = data?.dispatches?.data || [];
   const meta = data?.dispatches?.meta || {};
+  const summary = data?.dispatch_summary || {
+    total: 0,
+    in_transit: 0,
+    waiting: 0,
+  };
 
   return (
     <AppLayout title="Dispatch & Logistics">
@@ -30,10 +36,18 @@ export default function Dispatch() {
         title="Dispatch & Logistics"
         subtitle="Delivery planning, dispatch orders, and proof of delivery"
       >
-        <Button className="bg-factory-600 text-white hover:bg-factory-500">
+        <Button>
           <Plus size={16} /> New Dispatch
         </Button>
       </PageHeader>
+
+      <StatStrip
+        items={[
+          { label: "Dispatches", value: summary.total, hint: "All time" },
+          { label: "In transit", value: summary.in_transit, hint: "On the road", tone: "warning" },
+          { label: "Awaiting dispatch", value: summary.waiting, hint: "Packed, not loaded", tone: "danger" },
+        ]}
+      />
 
       <DataTable
         title="Dispatches"
@@ -45,7 +59,6 @@ export default function Dispatch() {
           { key: "status", label: "Status" },
         ]}
         data={dispatches}
-        createUrl="/dispatches/create"
         meta={meta}
       />
     </AppLayout>

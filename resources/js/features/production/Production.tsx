@@ -7,6 +7,7 @@ import { Head, Link, usePage } from "@inertiajs/react";
 import { AppLayout } from "@/components/layout";
 import { PageHeader } from "@/components/layout";
 import { DataTable } from "@/components/DataTable";
+import { StatStrip } from "@/components/StatStrip";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,12 @@ export default function Production() {
   const { props: data } = usePage() as any;
   const orders: ProductionOrder[] = data?.production_orders?.data || [];
   const meta = data?.production_orders?.meta || {};
+  const summary = data?.production_summary || {
+    total: 0,
+    active: 0,
+    completed: 0,
+    late: 0,
+  };
 
   const columns = [
     { key: "order_number", label: "Order #" },
@@ -51,16 +58,23 @@ export default function Production() {
         title="Production Orders"
         subtitle="Work orders, material issues, and production tracking"
       >
-        <Button className="bg-factory-600 text-white hover:bg-factory-500">
+        <Button>
           <Plus size={16} /> New Production Order
         </Button>
       </PageHeader>
 
+      <StatStrip
+        items={[
+          { label: "Work orders", value: summary.total, hint: "All time" },
+          { label: "In production", value: summary.active, hint: "On the floor now", tone: "warning" },
+          { label: "Late orders", value: summary.late, hint: "Past planned end date", tone: summary.late > 0 ? "danger" : "success" },
+        ]}
+      />
+
       <DataTable
-        title="Production Orders"
+        title="Production schedule"
         columns={columns}
         data={orders}
-        createUrl="/production-orders/create"
         meta={meta}
       />
     </AppLayout>

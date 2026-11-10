@@ -24,6 +24,12 @@ export default function Costing() {
   const { props: data } = usePage() as any;
   const variances: CostVariance[] = data?.variances?.data || [];
   const meta = data?.variances?.meta || {};
+  const summary = data?.cost_summary || {
+    material: "Rs. 0",
+    labour: "Rs. 0",
+    machine: "Rs. 0",
+    unit_cost: "Rs. 0",
+  };
 
   return (
     <AppLayout title="Production Costing">
@@ -36,25 +42,25 @@ export default function Costing() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <KPICard
           title="Total Material Cost"
-          value="Rs. 90,000"
+          value={summary.material}
           change="+12.5%"
           trend="up"
         />
         <KPICard
           title="Total Labour Cost"
-          value="Rs. 27,000"
+          value={summary.labour}
           change="+8.0%"
           trend="up"
         />
         <KPICard
           title="Machine & Overhead"
-          value="Rs. 32,000"
+          value={summary.machine}
           change="within tolerance"
           trend="neutral"
         />
         <KPICard
           title="Avg Unit Cost"
-          value="Rs. 149"
+          value={summary.unit_cost}
           change="+10.4%"
           trend="up"
         />

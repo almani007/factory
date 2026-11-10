@@ -7,6 +7,7 @@ import { Head, Link, usePage } from "@inertiajs/react";
 import { AppLayout } from "@/components/layout";
 import { PageHeader } from "@/components/layout";
 import { DataTable } from "@/components/DataTable";
+import { StatStrip } from "@/components/StatStrip";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -23,6 +24,11 @@ export default function Tenancy() {
   const { props: data } = usePage() as any;
   const tenants: Tenant[] = data?.tenants?.data || [];
   const meta = data?.tenants?.meta || {};
+  const summary = data?.tenancy_summary || {
+    total: 0,
+    active: 0,
+    suspended: 0,
+  };
 
   return (
     <AppLayout title="Tenancy Management">
@@ -30,10 +36,18 @@ export default function Tenancy() {
         title="Tenancy Management"
         subtitle="Companies, tenants and access isolation"
       >
-        <Button className="bg-factory-600 text-white hover:bg-factory-500">
+        <Button>
           <Plus size={16} /> Onboard Tenant
         </Button>
       </PageHeader>
+
+      <StatStrip
+        items={[
+          { label: "Tenants", value: summary.total, hint: "Provisioned workspaces" },
+          { label: "Active", value: summary.active, hint: "Billing normally", tone: "success" },
+          { label: "Suspended", value: summary.suspended, hint: "Access restricted", tone: summary.suspended > 0 ? "danger" : "success" },
+        ]}
+      />
 
       <DataTable
         title="Tenants"
@@ -45,7 +59,6 @@ export default function Tenancy() {
           { key: "status", label: "Status" },
         ]}
         data={tenants}
-        createUrl="/tenants/create"
         meta={meta}
       />
     </AppLayout>

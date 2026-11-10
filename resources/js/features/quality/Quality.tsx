@@ -7,6 +7,7 @@ import { Head, Link, usePage } from "@inertiajs/react";
 import { AppLayout } from "@/components/layout";
 import { PageHeader } from "@/components/layout";
 import { DataTable } from "@/components/DataTable";
+import { StatStrip } from "@/components/StatStrip";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -23,6 +24,12 @@ export default function Quality() {
   const { props: data } = usePage() as any;
   const inspections: QualityInspection[] = data?.inspections?.data || [];
   const meta = data?.inspections?.meta || {};
+  const summary = data?.quality_summary || {
+    total: 0,
+    passed: 0,
+    pending: 0,
+    failed: 0,
+  };
 
   const columns = [
     { key: "reference", label: "Reference" },
@@ -38,16 +45,23 @@ export default function Quality() {
         title="Quality Control"
         subtitle="Incoming, in-process, and final product inspections"
       >
-        <Button className="bg-factory-600 text-white hover:bg-factory-500">
+        <Button>
           <Plus size={16} /> New Inspection
         </Button>
       </PageHeader>
+
+      <StatStrip
+        items={[
+          { label: "Inspections", value: summary.total, hint: "Recorded to date" },
+          { label: "Passed", value: summary.passed, hint: "Released to next stage", tone: "success" },
+          { label: "Pending / failed", value: `${summary.pending} / ${summary.failed}`, hint: "Awaiting disposition", tone: summary.failed > 0 ? "danger" : "warning" },
+        ]}
+      />
 
       <DataTable
         title="Quality Inspections"
         columns={columns}
         data={inspections}
-        createUrl="/quality/inspections/create"
         meta={meta}
       />
     </AppLayout>
