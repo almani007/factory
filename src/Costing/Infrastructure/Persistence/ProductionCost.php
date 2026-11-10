@@ -2,31 +2,21 @@
 
 namespace Costing\Infrastructure\Persistence;
 
-use Tenancy\Traits\HasTenant;
-use Tenancy\Traits\HasFactoryScope;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * ProductionCost - actual cost snapshot for a production order (immutable).
+ */
 class ProductionCost extends Model
 {
-    use HasFactory, HasTenant, HasFactoryScope;
+    protected $table = 'production_costs';
 
     protected $fillable = [
-        'tenant_id',
-        'factory_id',
-        'production_order_id',
-        'material_cost',
-        'labour_cost',
-        'machine_cost',
-        'overhead_cost',
-        'wastage_cost',
-        'rework_cost',
-        'total_cost',
-        'unit_cost',
-        'quantity',
-        'costed_at',
+        'tenant_id', 'factory_id', 'production_order_id',
+        'material_cost', 'labour_cost', 'machine_cost', 'overhead_cost',
+        'wastage_cost', 'rework_cost', 'total_cost', 'unit_cost',
+        'quantity', 'costed_at',
     ];
 
     protected $casts = [
@@ -42,8 +32,13 @@ class ProductionCost extends Model
         'costed_at' => 'datetime',
     ];
 
-    public function productionOrder(): BelongsTo
+    public function lines(): HasMany
     {
-        return $this->belongsTo(\Production\Models\ProductionOrder::class);
+        return $this->hasMany(ProductionCostLine::class);
+    }
+
+    public function productionOrder()
+    {
+        return $this->belongsTo(\Production\Infrastructure\Persistence\ProductionOrder::class);
     }
 }

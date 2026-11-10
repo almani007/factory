@@ -2,27 +2,20 @@
 
 namespace Costing\Infrastructure\Persistence;
 
-use Tenancy\Traits\HasTenant;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * ProductionCostVariance - actual vs standard cost variance with explanation.
+ */
 class ProductionCostVariance extends Model
 {
-    use HasFactory, HasTenant;
+    protected $table = 'production_cost_variances';
 
     protected $fillable = [
-        'tenant_id',
-        'production_order_id',
-        'standard_cost',
-        'actual_cost',
-        'variance_amount',
-        'variance_percentage',
-        'material_variance',
-        'labour_variance',
-        'machine_variance',
-        'overhead_variance',
-        'variance_explanation',
-        'calculated_at',
+        'tenant_id', 'production_order_id', 'standard_cost', 'actual_cost',
+        'variance_amount', 'variance_percentage', 'material_variance',
+        'labour_variance', 'machine_variance', 'overhead_variance',
+        'variance_explanation', 'calculated_at',
     ];
 
     protected $casts = [

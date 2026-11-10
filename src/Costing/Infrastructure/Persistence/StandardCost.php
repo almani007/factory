@@ -2,25 +2,19 @@
 
 namespace Costing\Infrastructure\Persistence;
 
-use Tenancy\Traits\HasTenant;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * StandardCost - planned/expected product cost (frozen at effective date).
+ */
 class StandardCost extends Model
 {
-    use HasFactory, HasTenant;
+    protected $table = 'standard_costs';
 
     protected $fillable = [
-        'tenant_id',
-        'item_id',
-        'effective_from',
-        'effective_to',
-        'material_cost',
-        'labour_cost',
-        'machine_cost',
-        'overhead_cost',
-        'total_cost',
-        'is_active',
+        'tenant_id', 'item_id', 'effective_from', 'effective_to',
+        'material_cost', 'labour_cost', 'machine_cost', 'overhead_cost',
+        'total_cost', 'is_active',
     ];
 
     protected $casts = [
