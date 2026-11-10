@@ -14,8 +14,8 @@ Route::get('/dashboard', function () {
             'quality_rejection_rate' => 2.1,
             'actual_unit_cost' => 149,
         ],
-    ])->name('dashboard');
-});
+    ]);
+})->name('dashboard');
 
 // Inventory routes
 Route::get('/inventory', function () {
@@ -31,8 +31,8 @@ Route::get('/inventory', function () {
                 'to' => 0,
             ],
         ],
-    ])->name('inventory');
-});
+    ]);
+})->name('inventory');
 
 // Production routes
 Route::get('/production', function () {
@@ -48,8 +48,8 @@ Route::get('/production', function () {
                 'to' => 0,
             ],
         ],
-    ])->name('production');
-});
+    ]);
+})->name('production');
 
 // Quality routes
 Route::get('/quality', function () {
@@ -65,8 +65,8 @@ Route::get('/quality', function () {
                 'to' => 0,
             ],
         ],
-    ])->name('quality');
-});
+    ]);
+})->name('quality');
 
 // Costing routes
 Route::get('/costing', function () {
@@ -82,8 +82,8 @@ Route::get('/costing', function () {
                 'to' => 0,
             ],
         ],
-    ])->name('costing');
-});
+    ]);
+})->name('costing');
 
 // Purchasing routes
 Route::get('/purchasing', function () {
@@ -99,8 +99,8 @@ Route::get('/purchasing', function () {
                 'to' => 0,
             ],
         ],
-    ])->name('purchasing');
-});
+    ]);
+})->name('purchasing');
 
 // Sales routes
 Route::get('/sales', function () {
@@ -116,8 +116,8 @@ Route::get('/sales', function () {
                 'to' => 0,
             ],
         ],
-    ])->name('sales');
-});
+    ]);
+})->name('sales');
 
 // Dispatch routes
 Route::get('/dispatch', function () {
@@ -133,8 +133,8 @@ Route::get('/dispatch', function () {
                 'to' => 0,
             ],
         ],
-    ])->name('dispatch');
-});
+    ]);
+})->name('dispatch');
 
 // Accounting routes
 Route::get('/accounting', function () {
@@ -150,8 +150,8 @@ Route::get('/accounting', function () {
                 'to' => 0,
             ],
         ],
-    ])->name('accounting');
-});
+    ]);
+})->name('accounting');
 
 // Tenancy routes
 Route::get('/tenancy', function () {
@@ -167,8 +167,8 @@ Route::get('/tenancy', function () {
                 'to' => 0,
             ],
         ],
-    ])->name('tenancy');
-});
+    ]);
+})->name('tenancy');
 
 // Settings route
 Route::get('/settings', function () {

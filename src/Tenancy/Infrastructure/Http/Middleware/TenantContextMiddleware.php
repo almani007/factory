@@ -13,8 +13,8 @@ class TenantContextMiddleware
         $tenant = $this->resolveTenant($request);
 
         if ($tenant) {
-            app('tenant')->setCurrentTenant($tenant);
             config(['tenancy.current_tenant_id' => $tenant->id]);
+            config(['tenancy.current_tenant' => $tenant]);
         }
 
         return $next($request);

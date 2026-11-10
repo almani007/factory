@@ -33,6 +33,9 @@ COPY . /var/www/html
 # Install PHP dependencies
 RUN composer install --no-interaction --prefer-dist --optimize-autoloader
 
+# Fix php-fpm to listen on all interfaces (nginx connects from another container)
+RUN sed -i 's/;listen = 127.0.0.1:9000/listen = 9000/' /usr/local/etc/php-fpm.d/www.conf
+
 # Install Node dependencies
 RUN npm install
 

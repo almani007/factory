@@ -75,6 +75,7 @@ if [ "${APP_ENV}" = "production" ]; then
 fi
 
 # Fix permissions
+mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache 2>/dev/null || true
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 chmod -R 775 storage bootstrap/cache 2>/dev/null || true
 
