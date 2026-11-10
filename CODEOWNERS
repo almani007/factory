@@ -1,0 +1,13 @@
+# Zoventra FactoryOS — Code Owners
+
+*   @zoventra-team   /docs/
+*   @zoventra-team   /app/Modules/Accounting/
+*   @zoventra-team   /app/Modules/Inventory/
+*   @zoventra-team   /app/Modules/Tenancy/
+*   @zoventra-team   /app/Modules/Identity/
+*   @zoventra-team   /app/Modules/Production/
+*   @zoventra-team   /app/Modules/Manufacturing/
+*   @zoventra-team   /docker/
+*   @zoventra-team   /deployment/
+*   @zoventra-frontend  /resources/js/
+*   @zoventra-qa      /tests/
