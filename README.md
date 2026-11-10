@@ -149,12 +149,37 @@ docker compose up -d --build
 
 **Services included:**
 - `factory_app` — PHP 8.5 + Laravel (port 9000)
-- `factory_nginx` — Nginx web server (port 8000)
-- `factory_postgres` — PostgreSQL 18 (port 5432)
-- `factory_redis` — Redis 8 (port 6379)
-- `factory_node` — Vite dev server (port 5173)
+- `factory_nginx` — Nginx web server (port 8087)
+- `factory_postgres` — PostgreSQL 18 (port 5432, internal)
+- `factory_redis` — Redis 8 (port 6379, internal)
+- `factory_node` — Vite dev server (optional `dev` profile, port 5173)
 - `factory_queue` — Laravel queue worker
 - `factory_scheduler` — Laravel task scheduler
+
+### Demo Data
+
+The database seeds itself on first boot, as soon as the `tenants` table is
+empty. The demo workspace is **Zoventra Industries** (platform brand
+**Brixel FactoryOS**) and ships with:
+
+- 5 tenants, 1 company, 2 factories, 4 departments and 5 users
+- 12 items across raw materials, components, finished goods and packaging
+- 6 suppliers, 6 customers and 7 sales orders
+- 4 bills of materials and 13 production orders
+- 12 quality inspections, 14 stock movements and 8 dispatches
+- 10 journal entries with balanced lines, 5 customer invoices and 4 supplier bills
+- 6 cost variances and 6 production cost roll-ups
+
+The signed-in demo operator is **Ayesha Khan**
+(`admin@zoventra.test`, password `password`). No login screen is enabled yet —
+the console loads this workspace directly.
+
+To start over with a clean, freshly seeded database:
+
+```bash
+docker compose down -v          # also removes the Postgres volume
+docker compose up -d --build
+```
 
 **Useful commands:**
 
