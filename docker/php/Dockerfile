@@ -27,17 +27,14 @@ WORKDIR /var/www/html
 COPY docker/php/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Copy application files (vendor/ and node_modules/ excluded via .dockerignore)
+# Copy application files
 COPY . /var/www/html
 
 # Install PHP dependencies
 RUN composer install --no-interaction --prefer-dist --optimize-autoloader
 
-# Fix php-fpm to listen on all interfaces (nginx connects from another container)
+# Fix php-fpm to listen on all interfaces
 RUN sed -i 's/;listen = 127.0.0.1:9000/listen = 9000/' /usr/local/etc/php-fpm.d/www.conf
-
-# Install Node dependencies
-RUN npm install
 
 # Expose port 9000 and start php-fpm server
 EXPOSE 9000

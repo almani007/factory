@@ -24,6 +24,12 @@ Thumbs.db
 *.log
 /storage/logs/*.log
 
+# Laravel runtime caches
+/storage/framework/cache/
+/storage/framework/sessions/
+/storage/framework/testing/
+/storage/framework/views/
+
 # Build artifacts
 /dist/
 /build/

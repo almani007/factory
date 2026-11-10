@@ -6,12 +6,20 @@
   "require": {
     "php": "^8.5",
     "laravel/framework": "^13.0",
+    "spatie/laravel-permission": "^6.0",
     "laravel/sanctum": "^4.0",
-    "inertiajs/inertia-laravel": "^2.0"
+    "inertiajs/inertia-laravel": "^2.0",
+    "tightenco/ziggy": "^2.0",
+    "predis/predis": "^2.2",
+    "league/flysystem-aws-s3-v3": "^3.0",
+    "ramsey/uuid": "^4.7",
+    "brianium/paratest": "^7.0",
+    "brick/math": "^0.19"
   },
   "require-dev": {
     "pestphp/pest": "^3.0",
     "laravel/telescope": "^5.0",
+    "fakerphp/faker": "^1.24",
     "mockery/mockery": "^1.6",
     "nunomaduro/collision": "^8.0"
   },

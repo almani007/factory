@@ -22,6 +22,13 @@ export default function Dashboard() {
     actual_unit_cost: 0,
   };
 
+  const plannedText = stats.production_today ? stats.production_today.toLocaleString() + ' units' : '0 units';
+  const materialText = stats.raw_material_value ? 'Rs. ' + stats.raw_material_value.toLocaleString() : 'Rs. 0';
+  const delayedText = stats.orders_delayed ? stats.orders_delayed.toString() : '0';
+  const finishedText = stats.finished_goods ? stats.finished_goods.toLocaleString() + ' units' : '0 units';
+  const rejectionText = stats.quality_rejection_rate ? stats.quality_rejection_rate.toString() + '%' : '0%';
+  const unitCostText = stats.actual_unit_cost ? 'Rs. ' + stats.actual_unit_cost.toString() : 'Rs. 0';
+
   return (
     <AppLayout title="Dashboard">
       <PageHeader
@@ -31,40 +38,12 @@ export default function Dashboard() {
 
       {/* KPI Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-        <KPICard
-          title="Production Today"
-          value={`${stats.production_today?.toLocaleString() || "0"} units`}
-          icon={<Factory size={20} />}
-        />
-        <KPICard
-          title="Raw Material Value"
-          value={`Rs. ${stats.raw_material_value?.toLocaleString() || "0"}`}}
-          icon={<Truck size={20} />}
-        />
-        <KPICard
-          title="Orders Delayed"
-          value={stats.orders_delayed || 0}
-          change="+2"
-          trend="up"
-          icon={<AlertCircle size={20} />}
-        />
-        <KPICard
-          title="Finished Goods"
-          value={`${stats.finished_goods?.toLocaleString() || "0"} units`}
-          icon={<Clock size={20} />}
-        />
-        <KPICard
-          title="Quality Rejections"
-          value={`${stats.quality_rejection_rate || 0}%`}
-          change="-0.4%"
-          trend="down"
-          icon={<Shield size={20} />}
-        />
-        <KPICard
-          title="Actual Unit Cost"
-          value={`Rs. ${stats.actual_unit_cost || 0}`}
-          icon={<CreditCard size={20} />}
-        />
+        <KPICard title="Production Today" value={plannedText} icon={<Factory size={20} />} />
+        <KPICard title="Raw Material Value" value={materialText} icon={<Truck size={20} />} />
+        <KPICard title="Orders Delayed" value={delayedText} icon={<AlertCircle size={20} />} />
+        <KPICard title="Finished Goods" value={finishedText} icon={<Clock size={20} />} />
+        <KPICard title="Quality Rejections" value={rejectionText} icon={<Shield size={20} />} />
+        <KPICard title="Actual Unit Cost" value={unitCostText} icon={<CreditCard size={20} />} />
       </div>
 
       {/* Quick Actions */}
@@ -108,21 +87,21 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-start gap-3">
-              <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
+              <div className="w-2 h-2 bg-green-500 rounded-full mt-2" />
               <div className="text-sm">
                 <p className="text-gray-900">GRN-0001 received</p>
-                <p className="text-xs text-gray-500">Cotton Fabric — 500 meters</p>
+                <p className="text-xs text-gray-500">Cotton Fabric - 500 meters</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
-              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
+              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2" />
               <div className="text-sm">
                 <p className="text-gray-900">PO-2026-001 approved</p>
-                <p className="text-xs text-gray-500">Textile Mills Ltd — Rs. 125,000</p>
+                <p className="text-xs text-gray-500">Textile Mills Ltd - Rs. 125,000</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
-              <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2"></div>
+              <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2" />
               <div className="text-sm">
                 <p className="text-gray-900">Quality inspection pending</p>
                 <p className="text-xs text-gray-500">Production order PO-2026-003</p>
