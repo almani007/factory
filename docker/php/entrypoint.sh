@@ -5,6 +5,14 @@ echo "========================================"
 echo "Brixel FactoryOS - Container Starting"
 echo "========================================"
 
+# Queue workers and the scheduler share this image, but only the app container
+# should install dependencies, migrate, seed and sync assets. They also wait
+# for app health in compose, so the vendor volume is ready by the time they run.
+if [ "${RUN_BOOTSTRAP:-true}" != "true" ]; then
+    echo "Worker container — skipping bootstrap."
+    exec "$@"
+fi
+
 # Wait for database to be ready (optional - continue even if it fails)
 echo "Waiting for database connection..."
 for i in {1..15}; do

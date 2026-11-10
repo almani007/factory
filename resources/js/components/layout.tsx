@@ -4,7 +4,7 @@ import * as React from "react";
  * Application shell: fixed top bar, grouped sidebar, content canvas.
  */
 
-import { Head, Link, usePage } from "@inertiajs/react";
+import { Head, Link, router, usePage } from "@inertiajs/react";
 import {
   LayoutDashboard,
   Package,
@@ -65,14 +65,34 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children, title }: AppLayoutProps) {
-  const { url } = usePage() as any;
+  const { url, props } = usePage() as any;
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
   const path = (url || "/").split("?")[0];
   const isActive = (href: string) =>
     path === href || path.startsWith(`${href}/`);
 
-  const currentUser = { name: "Admin User", email: "admin@factoryos.local", role: "Super Admin" };
+  const currentUser = props?.user || {
+    name: "Admin User",
+    email: "admin@factoryos.local",
+    role: "Super Admin",
+  };
+  const tenant = props?.tenant || {
+    name: "Admin Workspace",
+    plan: null,
+  };
+  const initials = currentUser.name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part: string) => part.charAt(0).toUpperCase())
+    .join("");
+
+  const searchInventory = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const term = String(new FormData(event.currentTarget).get("q") || "").trim();
+    router.visit(term ? `/inventory?q=${encodeURIComponent(term)}` : "/inventory");
+  };
 
   return (
     <div className="min-h-screen bg-slate-100/70 text-slate-900">
@@ -104,13 +124,18 @@ export function AppLayout({ children, title }: AppLayoutProps) {
         </Link>
 
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
-          <div className="hidden items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400 md:flex">
-            <Search size={15} />
-            <span className="w-32">Search…</span>
-            <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
-              ⌘K
-            </kbd>
-          </div>
+          <form
+            onSubmit={searchInventory}
+            className="hidden items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm md:flex"
+          >
+            <Search size={15} className="text-slate-400" />
+            <input
+              type="search"
+              name="q"
+              placeholder="Search inventory…"
+              className="w-40 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
+            />
+          </form>
 
           <button
             type="button"
@@ -125,11 +150,11 @@ export function AppLayout({ children, title }: AppLayoutProps) {
             <div className="hidden flex-col items-end leading-tight sm:flex">
               <span className="text-sm font-medium text-slate-900">{currentUser.name}</span>
               <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                {currentUser.role}
+                {currentUser.role?.replace(/_/g, " ")}
               </span>
             </div>
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
-              {currentUser.name.charAt(0)}
+              {initials || "A"}
             </span>
           </div>
         </div>
@@ -197,11 +222,13 @@ export function AppLayout({ children, title }: AppLayoutProps) {
           <div className="border-t border-slate-200 p-3">
             <div className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2.5">
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-xs font-semibold text-sky-700">
-                AD
+                {initials || "AD"}
               </span>
               <div className="min-w-0">
-                <p className="truncate text-xs font-semibold text-slate-800">Admin Workspace</p>
-                <p className="truncate text-[11px] text-slate-500">Production environment</p>
+                <p className="truncate text-xs font-semibold text-slate-800">{tenant.name}</p>
+                <p className="truncate text-[11px] capitalize text-slate-500">
+                  {tenant.plan ? `${tenant.plan} plan` : "Production environment"}
+                </p>
               </div>
             </div>
           </div>

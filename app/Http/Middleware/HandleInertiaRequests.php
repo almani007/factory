@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -16,12 +17,29 @@ class HandleInertiaRequests extends Middleware
 
     public function share(Request $request): array
     {
+        $user = $request->user();
+        $tenant = null;
+
+        if (! $user) {
+            try {
+                $user = DB::table('users')->where('role', 'super_admin')->orderBy('id')->first();
+                $tenant = DB::table('tenants')->where('status', 'active')->orderBy('id')->first();
+            } catch (\Throwable) {
+                $user = null;
+            }
+        }
+
         return array_merge(parent::share($request), [
             'appName' => config('app.name', 'Brixel FactoryOS'),
-            'user' => $request->user() ? [
-                'id' => $request->user()->id,
-                'name' => $request->user()->name,
-                'email' => $request->user()->email,
+            'user' => $user ? [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role ?? null,
+            ] : null,
+            'tenant' => $tenant ? [
+                'name' => $tenant->name,
+                'plan' => $tenant->plan,
             ] : null,
         ]);
     }

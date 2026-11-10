@@ -47,6 +47,9 @@ x-laravel: &laravel
     LICENSE_MODE: local
     LICENSE_FILE: storage/licence/licence.dat
     LICENSE_VALIDATION_INTERVAL_HOURS: 24
+    # Only the app container bootstraps (deps, migrations, seed, assets).
+    # Workers wait for app health and skip bootstrap entirely.
+    RUN_BOOTSTRAP: "false"
   depends_on:
     postgres:
       condition: service_healthy
@@ -63,6 +66,8 @@ services:
     <<: *laravel
     container_name: factory_app
     restart: unless-stopped
+    environment:
+      RUN_BOOTSTRAP: "true"
     ports:
       - "9000:9000"
     healthcheck:
@@ -162,8 +167,10 @@ services:
     restart: unless-stopped
     command: [php, artisan, queue:work, --sleep=3, --tries=3, --timeout=60]
     depends_on:
-      - app
-      - redis
+      app:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - factory_network
 
@@ -176,7 +183,8 @@ services:
     restart: unless-stopped
     command: [php, artisan, schedule:work]
     depends_on:
-      - app
+      app:
+        condition: service_healthy
     networks:
       - factory_network
 
