@@ -8,7 +8,11 @@ FROM node:22-alpine AS assets
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+RUN npm config set fetch-retries 5 \
+    && npm config set fetch-retry-mintimeout 20000 \
+    && npm config set fetch-retry-maxtimeout 120000 \
+    && npm config set fetch-timeout 300000 \
+    && npm ci --no-audit --no-fund
 
 COPY vite.config.js tsconfig.json ./
 COPY resources ./resources
