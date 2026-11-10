@@ -55,7 +55,7 @@ export default function Tenancy() {
           { key: "name", label: "Tenant" },
           { key: "slug", label: "Slug" },
           { key: "email", label: "Email" },
-          { key: "plan", label: "Plan" },
+          { key: "plan", label: "Plan", format: (value: string) => <span className="capitalize">{value}</span> },
           { key: "status", label: "Status" },
         ]}
         data={tenants}

@@ -575,7 +575,7 @@ class PageController extends Controller
         $stored = json_decode($tenant->settings ?? '{}', true) ?: [];
 
         return Inertia::render('Settings', [
-            'tenant' => [
+            'company' => [
                 'company_name' => $tenant->name,
                 'tax_id' => $tenant->tax_id,
                 'email' => $tenant->email,

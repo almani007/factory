@@ -7,6 +7,43 @@ name: factory
 # Everything is auto-configured (migrations, key generation, storage link)
 # ============================================================================
 
+# Shared environment. Kept as its own anchor so a service can merge it and
+# override single keys (Compose/YAML merge keys are shallow, so overriding
+# `environment` directly would drop every inherited variable).
+x-laravel-env: &laravel-env
+  APP_NAME: "Brixel FactoryOS"
+  APP_ENV: local
+  APP_DEBUG: "true"
+  APP_URL: http://localhost:8087
+  APP_TIMEZONE: Asia/Karachi
+  APP_LOCALE: en
+  TELESCOPE_ENABLED: "false"
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_DATABASE: ${DB_DATABASE:-factory}
+  DB_USERNAME: ${DB_USERNAME:-factory}
+  DB_PASSWORD: ${DB_PASSWORD:-factory_secret}
+  CACHE_STORE: redis
+  SESSION_DRIVER: redis
+  QUEUE_CONNECTION: redis
+  REDIS_CLIENT: predis
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  MAIL_MAILER: log
+  AWS_ACCESS_KEY_ID:
+  AWS_SECRET_ACCESS_KEY:
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_BUCKET:
+  SANACTUM_STATEFUL_DOMAINS: localhost:8000
+  SESSION_DOMAIN: localhost
+  LICENSE_MODE: local
+  LICENSE_FILE: storage/licence/licence.dat
+  LICENSE_VALIDATION_INTERVAL_HOURS: 24
+  # Only the app container bootstraps (deps, migrations, seed, assets).
+  # Workers wait for app health and skip bootstrap entirely.
+  RUN_BOOTSTRAP: "false"
+
 x-laravel: &laravel
   image: factory_app
   build:
@@ -18,38 +55,7 @@ x-laravel: &laravel
     - factory_vendor:/var/www/html/vendor
     - factory_build:/var/www/html/public/build
   environment:
-    APP_NAME: "Brixel FactoryOS"
-    APP_ENV: local
-    APP_DEBUG: "true"
-    APP_URL: http://localhost:8087
-    APP_TIMEZONE: Asia/Karachi
-    APP_LOCALE: en
-    TELESCOPE_ENABLED: "false"
-    DB_CONNECTION: pgsql
-    DB_HOST: postgres
-    DB_PORT: 5432
-    DB_DATABASE: ${DB_DATABASE:-factory}
-    DB_USERNAME: ${DB_USERNAME:-factory}
-    DB_PASSWORD: ${DB_PASSWORD:-factory_secret}
-    CACHE_STORE: redis
-    SESSION_DRIVER: redis
-    QUEUE_CONNECTION: redis
-    REDIS_CLIENT: predis
-    REDIS_HOST: redis
-    REDIS_PORT: 6379
-    MAIL_MAILER: log
-    AWS_ACCESS_KEY_ID:
-    AWS_SECRET_ACCESS_KEY:
-    AWS_DEFAULT_REGION: us-east-1
-    AWS_BUCKET:
-    SANACTUM_STATEFUL_DOMAINS: localhost:8000
-    SESSION_DOMAIN: localhost
-    LICENSE_MODE: local
-    LICENSE_FILE: storage/licence/licence.dat
-    LICENSE_VALIDATION_INTERVAL_HOURS: 24
-    # Only the app container bootstraps (deps, migrations, seed, assets).
-    # Workers wait for app health and skip bootstrap entirely.
-    RUN_BOOTSTRAP: "false"
+    <<: *laravel-env
   depends_on:
     postgres:
       condition: service_healthy
@@ -67,6 +73,7 @@ services:
     container_name: factory_app
     restart: unless-stopped
     environment:
+      <<: *laravel-env
       RUN_BOOTSTRAP: "true"
     ports:
       - "9000:9000"

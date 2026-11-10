@@ -12,7 +12,7 @@ import { Save } from "lucide-react";
 
 export default function Settings() {
   const { props } = usePage() as any;
-  const tenant = props?.tenant || {};
+  const company = props?.company || {};
   const settings = props?.settings || {};
 
   return (
@@ -32,10 +32,10 @@ export default function Settings() {
             <CardTitle className="text-base font-semibold text-slate-900">Company Profile</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Field label="Company Name" value={tenant.company_name || ""} placeholder="Acme Manufacturing" />
-            <Field label="Legal / Tax ID" value={tenant.tax_id || ""} placeholder="NTN-1234567" />
-            <Field label="Primary Email" value={tenant.email || ""} placeholder="operations@example.com" />
-            <Field label="Phone" value={tenant.phone || ""} placeholder="+92 300 0000000" />
+            <Field label="Company Name" value={company.company_name || ""} placeholder="Acme Manufacturing" />
+            <Field label="Legal / Tax ID" value={company.tax_id || ""} placeholder="NTN-1234567" />
+            <Field label="Primary Email" value={company.email || ""} placeholder="operations@example.com" />
+            <Field label="Phone" value={company.phone || ""} placeholder="+92 300 0000000" />
           </CardContent>
         </Card>
 
