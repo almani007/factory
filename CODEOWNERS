@@ -1,13 +1,13 @@
-# Zoventra FactoryOS — Code Owners
+# Brixel FactoryOS — Code Owners
 
-*   @zoventra-team   /docs/
-*   @zoventra-team   /app/Modules/Accounting/
-*   @zoventra-team   /app/Modules/Inventory/
-*   @zoventra-team   /app/Modules/Tenancy/
-*   @zoventra-team   /app/Modules/Identity/
-*   @zoventra-team   /app/Modules/Production/
-*   @zoventra-team   /app/Modules/Manufacturing/
-*   @zoventra-team   /docker/
-*   @zoventra-team   /deployment/
-*   @zoventra-frontend  /resources/js/
-*   @zoventra-qa      /tests/
+*   @brixel-team   /docs/
+*   @brixel-team   /app/Modules/Accounting/
+*   @brixel-team   /app/Modules/Inventory/
+*   @brixel-team   /app/Modules/Tenancy/
+*   @brixel-team   /app/Modules/Identity/
+*   @brixel-team   /app/Modules/Production/
+*   @brixel-team   /app/Modules/Manufacturing/
+*   @brixel-team   /docker/
+*   @brixel-team   /deployment/
+*   @brixel-frontend  /resources/js/
+*   @brixel-qa      /tests/

@@ -1,10 +1,10 @@
-# Zoventra FactoryOS — "factory"
+# Brixel FactoryOS — "factory"
 
 Configurable Manufacturing ERP Platform — Version 1.0
 
 ## Overview
 
-Zoventra FactoryOS is a multi-tenant manufacturing management and ERP platform for small and medium factories (5–200 employees). It connects the entire manufacturing lifecycle:
+Brixel FactoryOS is a multi-tenant manufacturing management and ERP platform for small and medium factories (5–200 employees). It connects the entire manufacturing lifecycle:
 
 01 Sales Order → 02 Production Planning → 03 Purchasing → 04 Raw Material Inventory → 05 Production → 06 Quality Control → 07 Finished Goods → 08 Dispatch & Accounts
 

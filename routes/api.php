@@ -1,39 +1,38 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Illuminate\Http\Request;
 
 Route::prefix('v1')->group(function () {
     // Authentication
     Route::prefix('auth')->group(function () {
-        Route::post('/login', [\App\Modules\Identity\Http\Controllers\Auth\LoginController::class, 'store']);
-        Route::post('/logout', [\App\Modules\Identity\Http\Controllers\Auth\LoginController::class, 'destroy']);
-        Route::post('/refresh', [\App\Modules\Identity\Http\Controllers\Auth\LoginController::class, 'refresh']);
-        Route::get('/user', [\App\Modules\Identity\Http\Controllers\Auth\MeController::class, 'show']);
+        Route::post('/login', [\Identity\Presentation\Http\Controllers\Auth\LoginController::class, 'store']);
+        Route::post('/logout', [\Identity\Presentation\Http\Controllers\Auth\LoginController::class, 'destroy']);
+        Route::post('/refresh', [\Identity\Presentation\Http\Controllers\Auth\LoginController::class, 'refresh']);
+        Route::get('/user', [\Identity\Presentation\Http\Controllers\Auth\MeController::class, 'show']);
     });
 
     // Tenants
-    Route::apiResource('tenants', \App\Modules\Tenancy\Http\Controllers\TenantController::class);
+    Route::apiResource('tenants', \Tenancy\Presentation\Http\Controllers\TenantController::class);
 
     // Companies
-    Route::apiResource('companies', \App\Modules\Tenancy\Http\Controllers\CompanyController::class);
+    Route::apiResource('companies', \Tenancy\Presentation\Http\Controllers\CompanyController::class);
 
     // Factories
-    Route::apiResource('factories', \App\Modules\Organisation\Http\Controllers\FactoryController::class);
+    Route::apiResource('factories', \Organisation\Presentation\Http\Controllers\FactoryController::class);
 
     // Products
-    Route::apiResource('products', \App\Modules\Products\Http\Controllers\ProductController::class);
+    Route::apiResource('products', \Products\Presentation\Http\Controllers\ProductController::class);
 
     // Inventory
-    Route::apiResource('inventory/movements', \App\Modules\Inventory\Http\Controllers\StockMovementController::class);
+    Route::apiResource('inventory/movements', \Inventory\Presentation\Http\Controllers\StockMovementController::class);
 
     // Purchasing
-    Route::apiResource('suppliers', \App\Modules\Purchasing\Http\Controllers\SupplierController::class);
-    Route::apiResource('purchase-orders', \App\Modules\Purchasing\Http\Controllers\PurchaseOrderController::class);
+    Route::apiResource('suppliers', \Purchasing\Presentation\Http\Controllers\SupplierController::class);
+    Route::apiResource('purchase-orders', \Purchasing\Presentation\Http\Controllers\PurchaseOrderController::class);
 
     // Production
-    Route::apiResource('production-orders', \App\Modules\Production\Http\Controllers\ProductionOrderController::class);
+    Route::apiResource('production-orders', \Production\Presentation\Http\Controllers\ProductionOrderController::class);
 
     // Health
-    Route::get('/health', [\App\Modules\Core\Http\Controllers\HealthController::class, 'check']);
+    Route::get('/health', [\Configuration\Presentation\Http\Controllers\HealthController::class, 'check']);
 });

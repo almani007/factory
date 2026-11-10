@@ -1,9 +1,9 @@
-# Zoventra FactoryOS — CHANGELOG
+# Brixel FactoryOS — CHANGELOG
 
 ## [1.0.0] — 2026-11-10
 
 ### Added
-- Initial project scaffold for Zoventra FactoryOS
+- Initial project scaffold for Brixel FactoryOS
 - Final Software Requirements Specification (FINAL_SRS.md)
 - Complete Database ERD and schema catalogue (DATABASE_ERD.md)
 - Module boundaries and dependency rules (MODULE_BOUNDARIES.md)

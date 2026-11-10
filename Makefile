@@ -1,4 +1,4 @@
-# Zoventra FactoryOS — Makefile
+# Brixel FactoryOS — Makefile
 
 .PHONY: help install dev test lint docker-up docker-down migrate seed fresh lint-fix
 

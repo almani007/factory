@@ -1,4 +1,4 @@
-# Zoventra FactoryOS — Contributing
+# Brixel FactoryOS — Contributing
 
 ## Development Workflow
 

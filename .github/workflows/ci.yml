@@ -1,4 +1,4 @@
-# Zoventra FactoryOS — GitHub Actions CI/CD
+# Brixel FactoryOS — GitHub Actions CI/CD
 
 name: CI
 
@@ -78,7 +78,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker build -t zoventra/factoryos:latest .
+        run: docker build -t brixel/factoryos:latest .
 
       - name: Run Docker Compose config check
         run: docker-compose config

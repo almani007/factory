@@ -1,8 +1,8 @@
 {
-  "name": "zoventra/factoryos",
+  "name": "brixel/factoryos",
   "type": "project",
   "license": "proprietary",
-  "description": "Zoventra FactoryOS — Configurable Manufacturing ERP Platform",
+  "description": "Brixel FactoryOS \u2014 Configurable Manufacturing ERP Platform",
   "require": {
     "php": "^8.4",
     "laravel/framework": "^11.0",
@@ -34,5 +34,32 @@
     }
   },
   "minimum-stability": "stable",
-  "prefer-stable": true
+  "prefer-stable": true,
+  "autoload": {
+    "psr-4": {
+      "App\\": "app/",
+      "Database\\Factories\\": "database/factories/",
+      "Database\\Seeders\\": "database/seeders/",
+      "Tenancy\\": "src/Tenancy/",
+      "Identity\\": "src/Identity/",
+      "Organisation\\": "src/Organisation/",
+      "Configuration\\": "src/Configuration/",
+      "Products\\": "src/Products/",
+      "Inventory\\": "src/Inventory/",
+      "Purchasing\\": "src/Purchasing/",
+      "Manufacturing\\": "src/Manufacturing/",
+      "Production\\": "src/Production/",
+      "Quality\\": "src/Quality/",
+      "Costing\\": "src/Costing/",
+      "Sales\\": "src/Sales/",
+      "Dispatch\\": "src/Dispatch/",
+      "Accounting\\": "src/Accounting/",
+      "Maintenance\\": "src/Maintenance/",
+      "HR\\": "src/HR/",
+      "Reporting\\": "src/Reporting/",
+      "Notifications\\": "src/Notifications/",
+      "Integrations\\": "src/Integrations/",
+      "Shared\\": "src/Shared/"
+    }
+  }
 }

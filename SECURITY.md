@@ -1,4 +1,4 @@
-# Zoventra FactoryOS — Security Policy
+# Brixel FactoryOS — Security Policy
 
 ## Supported Versions
 
@@ -8,7 +8,7 @@
 
 ## Reporting a Vulnerability
 
-Please report security vulnerabilities to security@zoventra.example.
+Please report security vulnerabilities to security@brixel.example.
 
 ## Security Practices
 
