@@ -127,9 +127,9 @@ return new class extends Migration
 
         Schema::create('journal_lines', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('entry_id')->constrained()->onDelete('cascade');
+            $table->foreignId('entry_id')->constrained('journal_entries')->onDelete('cascade');
             $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
-            $table->foreignId('account_id')->constrained()->onDelete('cascade');
+            $table->foreignId('account_id')->constrained('chart_of_accounts')->onDelete('cascade');
             $table->decimal('debit_amount', 15, 4)->default(0);
             $table->decimal('credit_amount', 15, 4)->default(0);
             $table->decimal('debit_amount_base', 15, 4)->default(0);
@@ -237,7 +237,7 @@ return new class extends Migration
         Schema::create('payment_allocations', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
-            $table->foreignId('payment_id')->constrained()->onDelete('cascade');
+            $table->unsignedBigInteger('payment_id');
             $table->string('payment_type'); // customer, supplier
             $table->unsignedBigInteger('document_id');
             $table->decimal('amount', 15, 4);

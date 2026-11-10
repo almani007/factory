@@ -77,7 +77,7 @@ return new class extends Migration
             $table->foreignId('factory_id')->nullable()->constrained()->onDelete('cascade');
             $table->foreignId('production_order_id')->nullable()->constrained()->onDelete('cascade');
             $table->foreignId('work_order_id')->nullable()->constrained()->onDelete('cascade');
-            $table->foreignId('employee_id')->nullable()->constrained('employees')->onDelete('set null');
+            $table->unsignedBigInteger('employee_id')->nullable();
             $table->decimal('hours', 10, 4);
             $table->decimal('rate_per_hour', 15, 4);
             $table->decimal('total_cost', 15, 4);
@@ -93,7 +93,7 @@ return new class extends Migration
             $table->foreignId('factory_id')->nullable()->constrained()->onDelete('cascade');
             $table->foreignId('production_order_id')->nullable()->constrained()->onDelete('cascade');
             $table->foreignId('work_order_id')->nullable()->constrained()->onDelete('cascade');
-            $table->foreignId('machine_id')->nullable()->constrained('machines')->onDelete('set null');
+            $table->unsignedBigInteger('machine_id')->nullable();
             $table->decimal('hours', 10, 4);
             $table->decimal('rate_per_hour', 15, 4);
             $table->decimal('total_cost', 15, 4);

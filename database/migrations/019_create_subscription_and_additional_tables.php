@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('subscriptions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
-            $table->foreignId('plan_id')->constrained('subscription_plans')->onDelete('cascade');
+            $table->unsignedBigInteger('plan_id');
             $table->string('status')->default('active');
             $table->timestamp('starts_at');
             $table->timestamp('ends_at')->nullable();
@@ -77,7 +77,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
             $table->foreignId('item_id')->constrained()->onDelete('cascade');
-            $table->foreignId('batch_id')->nullable()->constrained()->onDelete('set null');
+            $table->foreignId('batch_id')->nullable()->constrained('stock_batches')->onDelete('set null');
             $table->string('serial_number')->unique();
             $table->string('status')->default('available');
             $table->foreignId('warehouse_id')->nullable()->constrained()->onDelete('set null');
@@ -159,7 +159,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
             $table->foreignId('item_id')->constrained()->onDelete('cascade');
-            $table->foreignId('batch_id')->nullable()->constrained()->onDelete('set null');
+            $table->foreignId('batch_id')->nullable()->constrained('stock_batches')->onDelete('set null');
             $table->decimal('quantity', 12, 4);
             $table->decimal('unit_cost', 15, 4);
             $table->decimal('total_cost', 15, 4);

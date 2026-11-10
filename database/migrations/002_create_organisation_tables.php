@@ -57,6 +57,20 @@ return new class extends Migration
             $table->index(['tenant_id', 'factory_id']);
         });
 
+        Schema::create('shifts', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
+            $table->foreignId('factory_id')->nullable()->constrained()->onDelete('cascade');
+            $table->string('name');
+            $table->time('start_time');
+            $table->time('end_time');
+            $table->unsignedInteger('break_minutes')->default(0);
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+
+            $table->index(['tenant_id', 'factory_id']);
+        });
+
         Schema::create('warehouses', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id')->constrained()->onDelete('cascade');

@@ -62,7 +62,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('quality_inspection_id')->constrained()->onDelete('cascade');
             $table->foreignId('tenant_id')->constrained()->onDelete('cascade');
-            $table->foreignId('template_item_id')->constrained()->onDelete('cascade');
+            $table->foreignId('template_item_id')->constrained('inspection_template_items')->onDelete('cascade');
             $table->decimal('measured_value', 12, 4)->nullable();
             $table->string('result'); // pass, fail
             $table->text('notes')->nullable();
