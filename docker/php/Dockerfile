@@ -1,3 +1,22 @@
+# syntax=docker/dockerfile:1
+
+# ---------------------------------------------------------------------------
+# Frontend assets (Vite + React + Tailwind)
+# ---------------------------------------------------------------------------
+FROM node:22-alpine AS assets
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+COPY vite.config.js tsconfig.json ./
+COPY resources ./resources
+RUN npm run build
+
+# ---------------------------------------------------------------------------
+# Application (PHP 8.5 + Laravel)
+# ---------------------------------------------------------------------------
 FROM php:8.5-fpm
 
 # Install system dependencies
@@ -32,6 +51,9 @@ COPY . /var/www/html
 
 # Install PHP dependencies
 RUN composer install --no-interaction --prefer-dist --optimize-autoloader
+
+# Copy compiled frontend assets from the build stage
+COPY --from=assets /app/public/build /var/www/html/public/build
 
 # Fix php-fpm to listen on all interfaces
 RUN sed -i 's/;listen = 127.0.0.1:9000/listen = 9000/' /usr/local/etc/php-fpm.d/www.conf

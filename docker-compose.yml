@@ -16,13 +16,15 @@ x-laravel: &laravel
   volumes:
     - .:/var/www/html:delegated
     - factory_vendor:/var/www/html/vendor
+    - factory_build:/var/www/html/public/build
   environment:
     APP_NAME: "Brixel FactoryOS"
     APP_ENV: local
     APP_DEBUG: "true"
-    APP_URL: http://localhost:8000
+    APP_URL: http://localhost:8087
     APP_TIMEZONE: Asia/Karachi
     APP_LOCALE: en
+    TELESCOPE_ENABLED: "false"
     DB_CONNECTION: pgsql
     DB_HOST: postgres
     DB_PORT: 5432
@@ -81,6 +83,7 @@ services:
       - "8087:80"
     volumes:
       - .:/var/www/html:ro
+      - factory_build:/var/www/html/public/build:ro
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       app:
@@ -136,6 +139,7 @@ services:
     image: node:22-alpine
     container_name: factory_node
     restart: unless-stopped
+    profiles: ["dev"]
     working_dir: /var/www/html
     ports:
       - "5173:5173"
@@ -184,6 +188,7 @@ volumes:
   factory_redis_data:
   factory_node_modules:
   factory_vendor:
+  factory_build:
 
 # ===========================================================================
 # Networks

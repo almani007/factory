@@ -144,7 +144,7 @@ cp .env.example .env
 # Start all services (PHP, Nginx, PostgreSQL, Redis, Node, Queue, Scheduler)
 docker compose up -d --build
 
-# That's it! The app is running at: http://localhost:8000
+# That's it! The app is running at: http://localhost:8087
 ```
 
 **Services included:**
@@ -197,7 +197,7 @@ chmod +x scripts/setup.sh
 git clone <repo-url> factory
 cd factory
 ./scripts/setup.sh
-# App is running at http://localhost:8000
+# App is running at http://localhost:8087
 ```
 
 ## Testing
