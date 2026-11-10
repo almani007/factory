@@ -5,7 +5,6 @@ export default {
   content: [
     './resources/**/*.blade.php',
     './resources/**/*.{js,ts,jsx,tsx}',
-    './app/Modules/**/*.php',
     './app/Http/**/*.php',
   ],
   darkMode: 'class',
@@ -25,5 +24,5 @@ export default {
       },
     },
   },
-  plugins: [require('@tailwindcss/forms')],
+  plugins: [],
 }

@@ -25,12 +25,12 @@ One platform to answer: **What did we purchase, what did we manufacture, what di
 
 | Component | Technology |
 |---|---|
-| Backend | Laravel |
-| PHP | PHP 8.4+ |
-| Frontend | React + TypeScript + Vite |
-| UI | Tailwind CSS + shadcn/ui |
-| Database | PostgreSQL |
-| Cache | Redis |
+| Backend | Laravel 13 |
+| PHP | PHP 8.5+ |
+| Frontend | React 19 + TypeScript 5.7 + Vite 6 |
+| UI | Tailwind CSS v4 + shadcn/ui |
+| Database | PostgreSQL 18 |
+| Cache | Redis 8 |
 | Queue | Laravel Queues + Redis |
 | Authentication | Laravel + Sanctum |
 | Deployment | Docker + Nginx |
@@ -95,11 +95,11 @@ factory/
 ## Getting Started
 
 ### Prerequisites
-- PHP 8.4+
+- PHP 8.5+
 - Composer
-- Node.js + npm
-- PostgreSQL
-- Redis
+- Node.js 22 + npm
+- PostgreSQL 18
+- Redis 8
 - Docker & Docker Compose (recommended)
 
 ### Development setup

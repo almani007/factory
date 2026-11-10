@@ -35,12 +35,12 @@ Brixel FactoryOS is a configurable manufacturing ERP platform for small and medi
 
 | Component | Technology |
 |---|---|
-| Backend | Laravel (modular monolith, DDD) |
-| PHP | PHP 8.4+ |
-| Frontend | React + TypeScript + Vite |
-| UI | Tailwind CSS + shadcn/ui |
-| Database | PostgreSQL |
-| Cache | Redis |
+| Backend | Laravel 13 (modular monolith, DDD) |
+| PHP | PHP 8.5+ |
+| Frontend | React 19 + TypeScript 5.7 + Vite 6 |
+| UI | Tailwind CSS v4 + shadcn/ui |
+| Database | PostgreSQL 18 |
+| Cache | Redis 8 |
 | Queue | Laravel Queues + Redis |
 | Authentication | Laravel + Sanctum |
 | Deployment | Docker + Nginx |

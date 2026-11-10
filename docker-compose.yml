@@ -54,7 +54,7 @@ services:
       - factory_network
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     container_name: factory_postgres
     restart: unless-stopped
     ports:
@@ -76,7 +76,7 @@ services:
       - factory_network
 
   redis:
-    image: redis:alpine
+    image: redis:8-alpine
     container_name: factory_redis
     restart: unless-stopped
     ports:
