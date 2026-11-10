@@ -5,10 +5,10 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->group(function () {
     // ============ Authentication ============
     Route::prefix('auth')->group(function () {
-        Route::post('/login', [\Identity\Presentation\Http\Controllers\Auth\LoginController::class, 'store']);
-        Route::post('/logout', [\Identity\Presentation\Http\Controllers\Auth\LoginController::class, 'destroy']);
-        Route::post('/refresh', [\Identity\Presentation\Http\Controllers\Auth\LoginController::class, 'refresh']);
-        Route::get('/user', [\Identity\Presentation\Http\Controllers\Auth\MeController::class, 'show']);
+        Route::post('/login', [\Identity\Presentation\Http\Controllers\LoginController::class, 'store']);
+        Route::post('/logout', [\Identity\Presentation\Http\Controllers\LoginController::class, 'destroy']);
+        Route::post('/refresh', [\Identity\Presentation\Http\Controllers\LoginController::class, 'refresh']);
+        Route::get('/user', [\Identity\Presentation\Http\Controllers\MeController::class, 'show']);
     });
 
     // ============ Tenancy ============
