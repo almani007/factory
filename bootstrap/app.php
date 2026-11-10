@@ -1,6 +1,5 @@
 <?php
 
-use Inertia\Middleware;
 use Tenancy\Infrastructure\Http\Middleware\TenantContextMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;

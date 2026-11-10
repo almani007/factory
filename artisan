@@ -1,7 +1,10 @@
 #!/usr/bin/env php
 <?php
 
+use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Application;
+use Symfony\Component\Console\Input\ArgvInput;
+use Symfony\Component\Console\Output\ConsoleOutput;
 
 define('LARAVEL_START', microtime(true));
 
@@ -12,4 +15,13 @@ if (file_exists(__DIR__.'/vendor/autoload.php')) {
 
 $app = require_once __DIR__.'/bootstrap/app.php';
 
-$app->run();
+$kernel = $app->make(Kernel::class);
+
+$input = new ArgvInput();
+$output = new ConsoleOutput();
+
+$status = $kernel->handle($input, $output);
+
+$kernel->terminate($input, $status);
+
+exit($status);

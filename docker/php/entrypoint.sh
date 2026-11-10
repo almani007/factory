@@ -5,33 +5,34 @@ echo "========================================"
 echo "Brixel FactoryOS - Container Starting"
 echo "========================================"
 
-# Wait for database to be ready
+# Wait for database to be ready (optional - continue even if it fails)
 echo "Waiting for database connection..."
-for i in {1..30}; do
-    if php -r "new PDO('pgsql:host=${DB_HOST:-postgres};port=${DB_PORT:-5432};dbname=${DB_DATABASE:-factory}', '${DB_USERNAME:-factory}', '${DB_PASSWORD:-factory}');" 2>/dev/null; then
+for i in {1..15}; do
+    if php -r "new PDO('pgsql:host=${DB_HOST:-postgres};port=${DB_PORT:-5432};dbname=${DB_DATABASE:-factory}', '${DB_USERNAME:-factory}', '${DB_PASSWORD:-factory_secret}');" 2>/dev/null; then
         echo "Database is ready!"
+        DB_READY=1
         break
     fi
-    echo "Database not ready, retrying in 2s... ($i/30)"
+    echo "Database not ready, retrying in 2s... ($i/15)"
     sleep 2
 done
 
 # Install PHP dependencies if vendor doesn't exist
 if [ ! -d "vendor" ]; then
     echo "Installing PHP dependencies..."
-    composer install --no-interaction --prefer-dist --optimize-autoloader
+    composer install --no-interaction --prefer-dist --optimize-autoloader || true
 fi
 
 # Install Node dependencies if node_modules doesn't exist
 if [ ! -d "node_modules" ]; then
     echo "Installing Node dependencies..."
-    npm install
+    npm install || true
 fi
 
 # Generate application key if not set
 if [ -z "${APP_KEY}" ] || [ "${APP_KEY}" = "base64:" ]; then
     echo "Generating application key..."
-    php artisan key:generate --force
+    php artisan key:generate --force 2>/dev/null || echo "Key generation skipped (will use default)"
 fi
 
 # Clear and cache configuration
@@ -41,24 +42,26 @@ php artisan route:clear 2>/dev/null || true
 php artisan view:clear 2>/dev/null || true
 php artisan cache:clear 2>/dev/null || true
 
-# Run database migrations
-echo "Running database migrations..."
-php artisan migrate --force --no-interaction 2>/dev/null || echo "Migrations may have already been run"
-
-# Seed database if tables are empty (first run)
-echo "Checking if seeding is needed..."
-TABLE_COUNT=$(php -r "
-require 'vendor/autoload.php';
-\$app = require_once 'bootstrap/app.php';
-\$kernel = \$app->make(Illuminate\Contracts\Console\Kernel::class);
-\$kernel->bootstrap();
-\$count = DB::table('tenants')->count();
-echo \$count;
-" 2>/dev/null || echo "0")
-
-if [ "${TABLE_COUNT}" = "0" ]; then
-    echo "Seeding database..."
-    php artisan db:seed --force --no-interaction 2>/dev/null || echo "Seeding skipped"
+# Run database migrations (if DB is ready)
+if [ "${DB_READY}" = "1" ]; then
+    echo "Running database migrations..."
+    php artisan migrate --force --no-interaction 2>/dev/null || echo "Migrations may have already been run"
+    
+    # Seed database if tables are empty
+    echo "Checking if seeding is needed..."
+    TABLE_COUNT=$(php -r "
+    require 'vendor/autoload.php';
+    \$app = require_once 'bootstrap/app.php';
+    \$kernel = \$app->make(Illuminate\Contracts\Console\Kernel::class);
+    \$kernel->bootstrap();
+    \$count = DB::table('tenants')->count();
+    echo \$count;
+    " 2>/dev/null || echo "0")
+    
+    if [ "${TABLE_COUNT}" = "0" ]; then
+        echo "Seeding database..."
+        php artisan db:seed --force --no-interaction 2>/dev/null || echo "Seeding skipped"
+    fi
 fi
 
 # Create storage link
