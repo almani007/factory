@@ -20,6 +20,10 @@ class PageController extends Controller
 {
     private function tenantId(): int
     {
+        if ($tenantId = \Shared\Support\TenantContext::currentTenantId()) {
+            return $tenantId;
+        }
+
         return (int) DB::table('tenants')
             ->where('status', 'active')
             ->orderBy('id')
@@ -86,7 +90,7 @@ class PageController extends Controller
             ->join('items as i', 'i.id', '=', 'sb.item_id')
             ->join('item_categories as c', 'c.id', '=', 'i.category_id')
             ->where('sb.tenant_id', $tenantId)
-            ->where('c.code', 'RM')
+            ->whereIn('c.code', ['FAB', 'TRM', 'PKG'])
             ->selectRaw('COALESCE(SUM(sb.on_hand * i.default_purchase_price), 0) as value')
             ->value('value');
 

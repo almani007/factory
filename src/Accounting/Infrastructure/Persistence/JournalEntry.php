@@ -26,6 +26,7 @@ class JournalEntry extends Model
         'currency',
         'exchange_rate_to_base',
         'reference',
+        'idempotency_key',
         'description',
         'status',
         'reversal_reference_id',

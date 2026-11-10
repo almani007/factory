@@ -69,6 +69,6 @@ class ProductionOrder extends Model
 
     public function bomVersion(): BelongsTo
     {
-        return $this->belongsTo(\Manufacturing\Models\BOMVersion::class, 'bom_version_id');
+        return $this->belongsTo(\Manufacturing\Infrastructure\Persistence\BOMVersion::class, 'bom_version_id');
     }
 }

@@ -19,6 +19,7 @@ class StockMovement extends Model
         'warehouse_id',
         'movement_type',
         'reference',
+        'idempotency_key',
         'source_document_type',
         'source_document_id',
         'source_document_line',
@@ -48,12 +49,12 @@ class StockMovement extends Model
 
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(\Organisation\Models\Warehouse::class);
+        return $this->belongsTo(\Organisation\Infrastructure\Persistence\Warehouse::class);
     }
 
     public function item(): BelongsTo
     {
-        return $this->belongsTo(\Products\Models\Item::class, 'item_id');
+        return $this->belongsTo(\Products\Infrastructure\Persistence\Item::class, 'item_id');
     }
 
     public function reversal(): BelongsTo

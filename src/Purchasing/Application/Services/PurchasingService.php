@@ -11,6 +11,8 @@ use Purchasing\Infrastructure\Persistence\GoodsReceiptLine;
 use Purchasing\Infrastructure\Persistence\SupplierInvoice;
 use Inventory\Application\Services\StockMovementService;
 use Accounting\Application\Services\JournalEntryService;
+use Shared\Support\AuditLogger;
+use Shared\Support\Outbox;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -194,6 +196,30 @@ class PurchasingService
                 'po_number' => $order->po_number,
                 'received_by' => $dto['received_by'],
             ]);
+
+            // Transactional outbox + audit for the committed receipt.
+            $tenantId = (int) $dto['tenant_id'];
+            $userId = (int) ($dto['received_by'] ?? 0);
+            Outbox::record(
+                'GoodsReceiptPosted',
+                'goods_receipt',
+                (int) $receipt->id,
+                [
+                    'tenant_id' => $tenantId,
+                    'grn_number' => $receipt->grn_number,
+                    'purchase_order_id' => $order->id,
+                ],
+                $tenantId
+            );
+            AuditLogger::record(
+                'goods_receipt_posted',
+                'goods_receipt',
+                (int) $receipt->id,
+                [],
+                ['grn_number' => $receipt->grn_number, 'status' => 'completed'],
+                $tenantId,
+                $userId
+            );
 
             return $receipt->load(['lines.item', 'purchaseOrder.supplier']);
         }, 3);

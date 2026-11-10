@@ -5,10 +5,12 @@ namespace Accounting\Application\Services;
 use Accounting\Infrastructure\Persistence\JournalEntry;
 use Accounting\Infrastructure\Persistence\JournalLine;
 use Accounting\Infrastructure\Persistence\Account;
-use Shared\Domain\Exceptions\UnbalancedJournalException;
-use Shared\Domain\Exceptions\PeriodClosedException;
+use Shared\Exceptions\UnbalancedJournalException;
+use Shared\Exceptions\PeriodClosedException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Shared\Support\AuditLogger;
+use Shared\Support\Outbox;
 
 /**
  * JournalEntryService
@@ -40,6 +42,16 @@ class JournalEntryService
     public function postJournal(array $dto): JournalEntry
     {
         return DB::transaction(function () use ($dto) {
+            // Idempotency: retrying the same key returns the existing posting.
+            if (! empty($dto['idempotency_key'] ?? null)) {
+                $existing = JournalEntry::where('tenant_id', $dto['tenant_id'])
+                    ->where('idempotency_key', $dto['idempotency_key'])
+                    ->first();
+                if ($existing) {
+                    return $existing->load('lines.account');
+                }
+            }
+
             // Check period is not closed
             if (!empty($dto['fiscal_period_id'])) {
                 $period = \Accounting\Infrastructure\Persistence\AccountingPeriod::find($dto['fiscal_period_id']);
@@ -75,6 +87,7 @@ class JournalEntryService
                 'currency' => $dto['currency'] ?? 'PKR',
                 'exchange_rate_to_base' => (float) ($dto['exchange_rate_to_base'] ?? 1),
                 'reference' => $dto['reference'],
+                'idempotency_key' => $dto['idempotency_key'] ?? null,
                 'description' => $dto['description'] ?? null,
                 'status' => 'posted',
                 'created_by' => $dto['created_by'],
@@ -111,6 +124,32 @@ class JournalEntryService
                 'total_credit' => $totalCredit,
                 'user_id' => $dto['created_by'],
             ]);
+
+            // Transactional outbox + audit for the committed posting.
+            $tenantId = (int) $dto['tenant_id'];
+            $userId = (int) ($dto['created_by'] ?? 0);
+            Outbox::record(
+                'JournalEntryPosted',
+                'journal_entry',
+                (int) $entry->id,
+                [
+                    'tenant_id' => $tenantId,
+                    'reference' => $dto['reference'],
+                    'document_date' => $dto['document_date'],
+                    'total_debit' => $totalDebit,
+                    'total_credit' => $totalCredit,
+                ],
+                $tenantId
+            );
+            AuditLogger::record(
+                'journal_entry_posted',
+                'journal_entry',
+                (int) $entry->id,
+                [],
+                ['reference' => $dto['reference'], 'status' => 'posted'],
+                $tenantId,
+                $userId
+            );
 
             return $entry->load('lines.account');
         }, 3);

@@ -7,7 +7,7 @@ use Production\Application\Services\ProductionOrderService;
 use Manufacturing\Application\Services\BOMService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use Shared\Domain\Exceptions\InsufficientStockException;
+use Shared\Exceptions\InsufficientStockException;
 
 /**
  * ProductionOrderController

@@ -63,6 +63,6 @@ class Item extends Model
 
     public function stockMovements(): HasMany
     {
-        return $this->hasMany(\Inventory\Models\StockMovement::class, 'item_id');
+        return $this->hasMany(\Inventory\Infrastructure\Persistence\StockMovement::class, 'item_id');
     }
 }

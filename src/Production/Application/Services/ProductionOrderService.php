@@ -11,9 +11,11 @@ use Production\Infrastructure\Persistence\FinishedGoodsReceipt;
 use Inventory\Application\Services\StockMovementService;
 use Manufacturing\Infrastructure\Persistence\BOMVersion;
 use Manufacturing\Infrastructure\Persistence\BOMComponent;
-use Shared\Domain\Exceptions\InsufficientStockException;
+use Shared\Exceptions\InsufficientStockException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Shared\Support\AuditLogger;
+use Shared\Support\Outbox;
 
 /**
  * ProductionOrderService
@@ -223,6 +225,30 @@ class ProductionOrderService
                 'good_quantity' => $entry->good_quantity,
                 'rejected_quantity' => $entry->rejected_quantity,
             ]);
+
+            // Transactional outbox + audit for the committed output.
+            $tenantId = (int) ($order->tenant_id ?? 0);
+            $userId = (int) ($dto['operator_id'] ?? 0);
+            Outbox::record(
+                'ProductionOutputRecorded',
+                'production_entry',
+                (int) $entry->id,
+                [
+                    'tenant_id' => $tenantId,
+                    'production_order_id' => (int) $order->id,
+                    'good_quantity' => $entry->good_quantity,
+                ],
+                $tenantId
+            );
+            AuditLogger::record(
+                'production_output_recorded',
+                'production_entry',
+                (int) $entry->id,
+                [],
+                ['production_order_id' => (int) $order->id, 'good_quantity' => $entry->good_quantity],
+                $tenantId,
+                $userId
+            );
 
             return $entry;
         }, 3);

@@ -41,7 +41,7 @@ class User extends Authenticatable
     public function factories()
     {
         return $this->belongsToMany(
-            \Tenancy\Models\Factory::class,
+            \Tenancy\Infrastructure\Persistence\Factory::class,
             'user_factory_access',
             'user_id',
             'factory_id'

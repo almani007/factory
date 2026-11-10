@@ -57,3 +57,4 @@ Thumbs.db
 
 # Docker
 .dockerignore
+.phpunit.cache/

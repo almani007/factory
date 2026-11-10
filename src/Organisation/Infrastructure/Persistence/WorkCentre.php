@@ -32,7 +32,7 @@ class WorkCentre extends Model
 
     public function factory(): BelongsTo
     {
-        return $this->belongsTo(\Tenancy\Models\Factory::class);
+        return $this->belongsTo(\Tenancy\Infrastructure\Persistence\Factory::class);
     }
 
     public function department(): BelongsTo

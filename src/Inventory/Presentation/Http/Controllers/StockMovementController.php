@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use Inventory\Application\Services\StockMovementService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use Shared\Domain\Exceptions\InsufficientStockException;
+use Shared\Exceptions\InsufficientStockException;
 
 /**
  * StockMovementController

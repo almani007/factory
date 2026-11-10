@@ -37,6 +37,6 @@ class RoutingOperation extends Model
 
     public function workCentre(): BelongsTo
     {
-        return $this->belongsTo(\Organisation\Models\WorkCentre::class);
+        return $this->belongsTo(\Organisation\Infrastructure\Persistence\WorkCentre::class);
     }
 }

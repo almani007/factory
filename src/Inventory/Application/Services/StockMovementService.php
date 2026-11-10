@@ -6,9 +6,11 @@ use Inventory\Infrastructure\Persistence\StockMovement;
 use Inventory\Infrastructure\Persistence\StockMovementLine;
 use Inventory\Infrastructure\Persistence\StockBalance;
 use Shared\Domain\ValueObjects\Money;
-use Shared\Domain\Exceptions\InsufficientStockException;
+use Shared\Exceptions\InsufficientStockException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Shared\Support\AuditLogger;
+use Shared\Support\Outbox;
 
 /**
  * StockMovementService
@@ -39,6 +41,16 @@ class StockMovementService
     public function postMovement(array $dto): StockMovement
     {
         return DB::transaction(function () use ($dto) {
+            // Idempotency: retrying the same key returns the existing posting.
+            if (! empty($dto['idempotency_key'] ?? null)) {
+                $existing = StockMovement::where('tenant_id', $dto['tenant_id'])
+                    ->where('idempotency_key', $dto['idempotency_key'])
+                    ->first();
+                if ($existing) {
+                    return $existing->load('lines.item');
+                }
+            }
+
             // Validate OUT movements against available stock
             if ($this->isOutboundMovement($dto['movement_type'])) {
                 $this->validateAvailability($dto);
@@ -51,6 +63,7 @@ class StockMovementService
                 'warehouse_id' => $dto['warehouse_id'],
                 'movement_type' => $dto['movement_type'],
                 'reference' => $dto['reference'],
+                'idempotency_key' => $dto['idempotency_key'] ?? null,
                 'source_document_type' => $dto['source_document_type'] ?? null,
                 'source_document_id' => $dto['source_document_id'] ?? null,
                 'source_document_line' => $dto['source_document_line'] ?? null,
@@ -110,6 +123,32 @@ class StockMovementService
                 'reference' => $dto['reference'],
                 'user_id' => $dto['user_id'],
             ]);
+
+            // Transactional outbox + audit for the committed posting.
+            $tenantId = (int) $dto['tenant_id'];
+            $userId = (int) ($dto['user_id'] ?? 0);
+            Outbox::record(
+                'StockMovementPosted',
+                'stock_movement',
+                (int) $movement->id,
+                [
+                    'tenant_id' => $tenantId,
+                    'movement_type' => $dto['movement_type'],
+                    'reference' => $dto['reference'],
+                    'source_document_type' => $dto['source_document_type'] ?? null,
+                    'source_document_id' => $dto['source_document_id'] ?? null,
+                ],
+                $tenantId
+            );
+            AuditLogger::record(
+                'stock_movement_posted',
+                'stock_movement',
+                (int) $movement->id,
+                [],
+                ['movement_type' => $dto['movement_type'], 'reference' => $dto['reference']],
+                $tenantId,
+                $userId
+            );
 
             return $movement->load('lines.item');
         }, 3); // retry on deadlock/serialization failure

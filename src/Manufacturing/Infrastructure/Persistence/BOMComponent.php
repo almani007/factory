@@ -35,6 +35,6 @@ class BOMComponent extends Model
 
     public function item(): BelongsTo
     {
-        return $this->belongsTo(\Products\Models\Item::class);
+        return $this->belongsTo(\Products\Infrastructure\Persistence\Item::class);
     }
 }

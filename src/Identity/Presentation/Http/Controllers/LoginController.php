@@ -3,7 +3,7 @@
 namespace Identity\Presentation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use Identity\Models\User;
+use Identity\Infrastructure\Persistence\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
