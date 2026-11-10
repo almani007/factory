@@ -1,3 +1,4 @@
+import * as React from "react";
 /**
  * Brixel FactoryOS — Shared Link Component
  * Inertia.js link wrapper with active state detection.

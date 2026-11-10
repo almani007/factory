@@ -1,3 +1,4 @@
+import * as React from "react";
 /**
  * Brixel FactoryOS — Page Routing Map
  * Maps route names to feature page components.

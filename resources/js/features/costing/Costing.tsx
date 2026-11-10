@@ -21,7 +21,7 @@ interface CostVariance {
 }
 
 export default function Costing() {
-  const { data } = usePage() as any;
+  const { props: data } = usePage() as any;
   const variances: CostVariance[] = data?.variances?.data || [];
   const meta = data?.variances?.meta || {};
 

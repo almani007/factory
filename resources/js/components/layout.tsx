@@ -1,3 +1,4 @@
+import * as React from "react";
 /**
  * Brixel FactoryOS — Layout Components
  */
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { name: "Sales", href: "/sales", icon: CreditCard },
   { name: "Dispatch", href: "/dispatch", icon: Truck },
   { name: "Accounting", href: "/accounting", icon: CreditCard },
+  { name: "Tenancy", href: "/tenancy", icon: User },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 

@@ -23,7 +23,7 @@ interface InventoryMovement {
 }
 
 export default function Inventory() {
-  const { data } = usePage() as any;
+  const { props: data } = usePage() as any;
   const movements: InventoryMovement[] = data?.movements?.data || [];
   const meta = data?.movements?.meta || {};
 

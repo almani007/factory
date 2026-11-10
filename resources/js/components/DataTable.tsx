@@ -1,3 +1,4 @@
+import * as React from "react";
 /**
  * Brixel FactoryOS — DataTable Component with Inertia.js integration
  */
@@ -33,8 +34,9 @@ export function DataTable<T extends Record<string, any>>({
   className,
 }: DataTableProps<T>) {
   const { url } = usePage() as any;
-  const sortField = (new URL(url).searchParams.get("sort") || "") as string;
-  const sortDir = (new URL(url).searchParams.get("dir") || "asc") as string;
+  const searchParams = new URLSearchParams((url || "").split("?")[1] || "");
+  const sortField = (searchParams.get("sort") || "") as string;
+  const sortDir = (searchParams.get("dir") || "asc") as string;
 
   return (
     <div className={className}>

@@ -29,6 +29,13 @@ if [ ! -d "node_modules" ]; then
     npm install || true
 fi
 
+# Sync compiled assets from the image into the shared build volume.
+# The named volume survives rebuilds, so refresh it on every boot.
+if [ -f /opt/factory-assets/manifest.json ]; then
+    mkdir -p public/build
+    cp -a /opt/factory-assets/. public/build/ 2>/dev/null || true
+fi
+
 # Generate application key if not set
 if [ -z "${APP_KEY}" ] || [ "${APP_KEY}" = "base64:" ]; then
     echo "Generating application key..."

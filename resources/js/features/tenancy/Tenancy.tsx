@@ -20,7 +20,7 @@ interface Tenant {
 }
 
 export default function Tenancy() {
-  const { data } = usePage() as any;
+  const { props: data } = usePage() as any;
   const tenants: Tenant[] = data?.tenants?.data || [];
   const meta = data?.tenants?.meta || {};
 

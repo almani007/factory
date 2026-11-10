@@ -20,7 +20,7 @@ interface Supplier {
 }
 
 export default function Purchasing() {
-  const { data } = usePage() as any;
+  const { props: data } = usePage() as any;
   const suppliers: Supplier[] = data?.suppliers?.data || [];
   const meta = data?.suppliers?.meta || {};
 

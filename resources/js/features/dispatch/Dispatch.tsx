@@ -20,7 +20,7 @@ interface Dispatch {
 }
 
 export default function Dispatch() {
-  const { data } = usePage() as any;
+  const { props: data } = usePage() as any;
   const dispatches: Dispatch[] = data?.dispatches?.data || [];
   const meta = data?.dispatches?.meta || {};
 

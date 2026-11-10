@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Factory, Truck, Shield, CreditCard, Clock, AlertCircle } from "lucide-react";
 
 export default function Dashboard() {
-  const { data } = usePage() as any;
+  const { props: data } = usePage() as any;
   const stats = data?.stats || {
     production_today: 0,
     raw_material_value: 0,

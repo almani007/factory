@@ -1,3 +1,4 @@
+import * as React from "react";
 /**
  * Brixel FactoryOS — KPI Card Component
  */

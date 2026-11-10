@@ -20,7 +20,7 @@ interface Customer {
 }
 
 export default function Sales() {
-  const { data } = usePage() as any;
+  const { props: data } = usePage() as any;
   const customers: Customer[] = data?.customers?.data || [];
   const meta = data?.customers?.meta || {};
 

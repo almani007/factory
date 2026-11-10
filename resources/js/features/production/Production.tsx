@@ -33,7 +33,7 @@ const STATUS_CONFIG: Record<string, { label: string; variant: string }> = {
 };
 
 export default function Production() {
-  const { data } = usePage() as any;
+  const { props: data } = usePage() as any;
   const orders: ProductionOrder[] = data?.production_orders?.data || [];
   const meta = data?.production_orders?.meta || {};
 

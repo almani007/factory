@@ -54,6 +54,7 @@ RUN composer install --no-interaction --prefer-dist --optimize-autoloader
 
 # Copy compiled frontend assets from the build stage
 COPY --from=assets /app/public/build /var/www/html/public/build
+COPY --from=assets /app/public/build /opt/factory-assets
 
 # Fix php-fpm to listen on all interfaces
 RUN sed -i 's/;listen = 127.0.0.1:9000/listen = 9000/' /usr/local/etc/php-fpm.d/www.conf

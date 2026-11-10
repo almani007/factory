@@ -20,7 +20,7 @@ interface QualityInspection {
 }
 
 export default function Quality() {
-  const { data } = usePage() as any;
+  const { props: data } = usePage() as any;
   const inspections: QualityInspection[] = data?.inspections?.data || [];
   const meta = data?.inspections?.meta || {};
 

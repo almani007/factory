@@ -6,18 +6,29 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { createInertiaApp } from "@inertiajs/react";
-import { AppLayout } from "@/components/layout";
 
-const appName = import.meta.env.VITE_APP_NAME || "Brixel FactoryOS";
+const pages = import.meta.glob("./features/**/*.tsx", { eager: true });
+
+const pageModules = Object.fromEntries(
+    Object.entries(pages).map(([path, module]) => [path.toLowerCase(), module])
+);
 
 createInertiaApp({
     resolve: (name) => {
-        const pages = import.meta.glob("./features/**/*.tsx", { eager: true });
-        return pages[`./features/${name.charAt(0).toUpperCase() + name.slice(1)}/${name.charAt(0).toUpperCase() + name.slice(1)}.tsx`];
+        const [moduleName, pageName] = name.includes("/")
+            ? name.split("/")
+            : [name, name];
+
+        const key = `./features/${moduleName.toLowerCase()}/${pageName.toLowerCase()}.tsx`;
+        const page = pageModules[key];
+
+        if (!page) {
+            throw new Error(`Inertia page not found: ${name} (looked for ${key})`);
+        }
+
+        return page;
     },
     setup({ el, App, props }) {
-        createRoot(el!).render(
-            <App {...props} layout={(page: any) => <AppLayout page={page} title={appName} />} />
-        );
+        createRoot(el!).render(<App {...props} />);
     },
 });

@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { KPICard } from "@/components/KPICard";
 
 export default function Accounting() {
-  const { data } = usePage() as any;
+  const { props: data } = usePage() as any;
   const journalEntries = data?.journal_entries?.data || [];
   const meta = data?.journal_entries?.meta || {};
 
