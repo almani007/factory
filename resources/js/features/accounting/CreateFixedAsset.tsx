@@ -3,7 +3,7 @@
  * Add a new fixed asset to the register.
  */
 
-import { Head, Link, router, usePage, useForm } from "@inertiajs/react";
+import { Link, usePage, useForm } from "@inertiajs/react";
 import { AppLayout } from "@/components/layout";
 import { PageHeader } from "@/components/layout";
 import { Button } from "@/components/ui/button";
@@ -19,23 +19,23 @@ export default function CreateFixedAsset() {
   const { props: data } = usePage() as any;
   const accounts: Account[] = data?.accounts || [];
 
-  const { data: formData, setData, errors, isPending } =
-    useForm<{ asset_code: string; asset_name: string; asset_category: string; account_id: string; purchase_date: string; purchase_cost: string; location: string; status: string }>({
+  const { data: formData, setData, errors, processing, post } =
+    useForm<{ asset_code: string; asset_name: string; asset_category: string; account_id: string; purchase_date: string; purchase_cost: string; salvage_value: string; useful_life_years: string; location: string; status: string }>({
       asset_code: "",
       asset_name: "",
       asset_category: "",
       account_id: "",
       purchase_date: "",
       purchase_cost: "",
+      salvage_value: "",
+      useful_life_years: "5",
       location: "",
       status: "active",
     });
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    router.post("/fixed-assets", formData, {
-      onSuccess: () => router.visit("/accounting/fixed-assets"),
-    });
+    post("/accounting/fixed-assets", { preserveScroll: true });
   };
 
   return (
@@ -130,7 +130,7 @@ export default function CreateFixedAsset() {
               </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium text-slate-700">Status</label>
-                <Select onValueChange={(value) => setData("status", value)}>
+                <Select value={formData.status} onValueChange={(value) => setData("status", value)}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder={formData.status} />
                   </SelectTrigger>
@@ -141,6 +141,33 @@ export default function CreateFixedAsset() {
                   </SelectContent>
                 </Select>
                 {errors.status && <p className="text-xs text-rose-600">{errors.status}</p>}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-slate-700">Salvage Value</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formData.salvage_value}
+                  onChange={(e) => setData("salvage_value", e.currentTarget.value)}
+                  placeholder="0.00"
+                  className={cn("w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-factory-500 focus:outline-none focus:ring-1 focus:ring-factory-500", errors.salvage_value ? "border-rose-500" : "")}
+                />
+                {errors.salvage_value && <p className="text-xs text-rose-600">{errors.salvage_value}</p>}
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-slate-700">Useful Life (years)</label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={formData.useful_life_years}
+                  onChange={(e) => setData("useful_life_years", e.currentTarget.value)}
+                  className={cn("w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-factory-500 focus:outline-none focus:ring-1 focus:ring-factory-500", errors.useful_life_years ? "border-rose-500" : "")}
+                />
+                {errors.useful_life_years && <p className="text-xs text-rose-600">{errors.useful_life_years}</p>}
               </div>
             </div>
 
@@ -157,8 +184,8 @@ export default function CreateFixedAsset() {
         </Card>
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={isPending}>
-            {isPending ? "Creating…" : <><Building2 size={16} /> Create Asset</>}
+          <Button type="submit" disabled={processing}>
+            {processing ? "Creating…" : <><Building2 size={16} /> Create Asset</>}
           </Button>
         </div>
       </form>

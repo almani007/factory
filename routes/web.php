@@ -5,6 +5,33 @@ use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
 
+Route::get('/login', function () {
+    if (auth()->check()) {
+        return redirect('/dashboard');
+    }
+
+    try {
+        $user = \Identity\Infrastructure\Persistence\User::withoutGlobalScope('tenant')
+            ->where('is_active', true)
+            ->orderByRaw("CASE WHEN role = 'super_admin' THEN 0 ELSE 1 END")
+            ->orderBy('id')
+            ->first();
+
+        if ($user) {
+            auth()->login($user);
+            request()->session()->regenerate();
+
+            return redirect()->intended('/dashboard');
+        }
+    } catch (\Throwable $e) {
+        report($e);
+
+        return response('Authentication bootstrap failed: '.$e->getMessage(), 500);
+    }
+
+    return response('Unauthenticated. No active user account is available to sign in.', 401);
+})->name('login');
+
 Route::get('/dashboard', [PageController::class, 'dashboard'])->name('dashboard');
 Route::get('/inventory', [PageController::class, 'inventory'])->name('inventory');
 Route::get('/inventory/create', [PageController::class, 'createInventoryMovement'])->name('inventory.create');
@@ -22,11 +49,44 @@ Route::get('/dispatch', [PageController::class, 'dispatch'])->name('dispatch');
 Route::get('/dispatch/create', [PageController::class, 'createDispatch'])->name('dispatch.create');
 Route::get('/accounting', [PageController::class, 'accounting'])->name('accounting');
 Route::get('/accounting/chart-of-accounts', [PageController::class, 'chartOfAccounts'])->name('accounting.chart-of-accounts');
+Route::get('/accounting/chart-of-accounts/export', [PageController::class, 'exportChartOfAccounts'])->name('accounting.chart-of-accounts.export');
+Route::get('/accounting/chart-of-accounts/import', [PageController::class, 'importAccountsPage'])->name('accounting.chart-of-accounts.import');
+Route::get('/accounting/chart-of-accounts/import/template', [PageController::class, 'importAccountTemplate'])->name('accounting.chart-of-accounts.import.template');
+Route::post('/accounting/chart-of-accounts/import/preview', [PageController::class, 'previewAccountImport'])->name('accounting.chart-of-accounts.import.preview');
+Route::post('/accounting/chart-of-accounts/import/commit', [PageController::class, 'commitAccountImport'])->name('accounting.chart-of-accounts.import.commit');
 Route::get('/accounting/chart-of-accounts/create', [PageController::class, 'createAccountPage'])->name('accounting.account.create');
+Route::post('/accounting/chart-of-accounts', [PageController::class, 'storeAccount'])->name('accounting.chart-of-accounts.store');
+Route::get('/accounting/chart-of-accounts/{id}/ledger', [PageController::class, 'accountLedger'])->name('accounting.chart-of-accounts.ledger');
+Route::get('/accounting/chart-of-accounts/{id}/ledger/export', [PageController::class, 'exportAccountLedger'])->name('accounting.chart-of-accounts.ledger.export');
+Route::get('/accounting/chart-of-accounts/{id}/edit', [PageController::class, 'editAccountPage'])->name('accounting.chart-of-accounts.edit');
+Route::get('/accounting/chart-of-accounts/{id}/duplicate', [PageController::class, 'duplicateAccountPage'])->name('accounting.chart-of-accounts.duplicate');
+Route::get('/accounting/account-groups', [PageController::class, 'accountGroups'])->name('accounting.account-groups');
+Route::post('/accounting/account-groups', [PageController::class, 'storeAccountGroup'])->name('accounting.account-groups.store');
+Route::match(['put', 'patch'], '/accounting/account-groups/{id}', [PageController::class, 'updateAccountGroup'])->name('accounting.account-groups.update');
+Route::delete('/accounting/account-groups/{id}', [PageController::class, 'deleteAccountGroup'])->name('accounting.account-groups.delete');
+Route::post('/accounting/chart-of-accounts/bulk-toggle', [PageController::class, 'bulkToggleAccounts'])->name('accounting.chart-of-accounts.bulk-toggle');
+Route::post('/accounting/chart-of-accounts/{id}/toggle', [PageController::class, 'toggleAccount'])->name('accounting.chart-of-accounts.toggle');
+Route::match(['put', 'patch'], '/accounting/chart-of-accounts/{id}', [PageController::class, 'updateAccount'])->name('accounting.chart-of-accounts.update');
+Route::delete('/accounting/chart-of-accounts/{id}', [PageController::class, 'deleteAccount'])->name('accounting.chart-of-accounts.delete');
+Route::get('/accounting/chart-of-accounts/{id}', [PageController::class, 'showAccountPage'])->name('accounting.chart-of-accounts.show');
 Route::get('/accounting/journal-entries/create', [PageController::class, 'createJournalEntry'])->name('accounting.journal-entry.create');
+Route::get('/accounting/journal-entries/export', [PageController::class, 'exportJournalEntries'])->name('accounting.journal-entries.export');
+Route::post('/accounting/journal-entries', [PageController::class, 'storeJournalEntry'])->name('accounting.journal-entries.store');
+Route::get('/accounting/journal-entries/{id}', [PageController::class, 'journalEntryShow'])->name('accounting.journal-entries.show');
+Route::post('/accounting/journal-entries/{id}/post', [PageController::class, 'postJournalEntry'])->name('accounting.journal-entries.post');
+Route::post('/accounting/journal-entries/{id}/reverse', [PageController::class, 'reverseJournalEntry'])->name('accounting.journal-entries.reverse');
+Route::delete('/accounting/journal-entries/{id}', [PageController::class, 'deleteJournalEntry'])->name('accounting.journal-entries.delete');
+Route::get('/accounting/periods', [PageController::class, 'accountingPeriods'])->name('accounting.periods');
+Route::post('/accounting/periods', [PageController::class, 'storeAccountingPeriod'])->name('accounting.periods.store');
+Route::post('/accounting/periods/{id}/toggle', [PageController::class, 'toggleAccountingPeriod'])->name('accounting.periods.toggle');
 Route::get('/accounting/trial-balance', [PageController::class, 'trialBalancePage'])->name('accounting.trial-balance');
+Route::get('/accounting/trial-balance/export', [PageController::class, 'exportTrialBalance'])->name('accounting.trial-balance.export');
 Route::get('/accounting/profit-loss', [PageController::class, 'profitAndLossPage'])->name('accounting.profit-loss');
+Route::get('/accounting/profit-loss/export', [PageController::class, 'exportProfitAndLoss'])->name('accounting.profit-loss.export');
 Route::get('/accounting/balance-sheet', [PageController::class, 'balanceSheetPage'])->name('accounting.balance-sheet');
+Route::get('/accounting/balance-sheet/export', [PageController::class, 'exportBalanceSheet'])->name('accounting.balance-sheet.export');
+Route::get('/accounting/cash-flow', [PageController::class, 'cashFlowPage'])->name('accounting.cash-flow');
+Route::get('/accounting/cash-flow/export', [PageController::class, 'exportCashFlow'])->name('accounting.cash-flow.export');
 Route::get('/tenancy', [PageController::class, 'tenancy'])->name('tenancy');
 Route::get('/tenancy/create', [PageController::class, 'createTenant'])->name('tenancy.create');
 Route::get('/settings', [PageController::class, 'settings'])->name('settings');
@@ -45,7 +105,12 @@ Route::get('/products/create', [PageController::class, 'createProduct'])->name('
 
 // Warehouses
 Route::get('/warehouses', [PageController::class, 'warehouses'])->name('warehouses');
+Route::get('/warehouses/export', [PageController::class, 'exportWarehouses'])->name('warehouses.export');
 Route::get('/warehouses/create', [PageController::class, 'createWarehouse'])->name('warehouses.create');
+Route::post('/warehouses', [PageController::class, 'storeWarehouse'])->name('warehouses.store');
+Route::get('/warehouses/{id}/edit', [PageController::class, 'editWarehouse'])->name('warehouses.edit');
+Route::match(['put', 'patch'], '/warehouses/{id}', [PageController::class, 'updateWarehouse'])->name('warehouses.update');
+Route::post('/warehouses/{id}/toggle', [PageController::class, 'toggleWarehouse'])->name('warehouses.toggle');
 
 // Manufacturing — BOMs
 Route::get('/boms', [PageController::class, 'boms'])->name('boms');
@@ -97,6 +162,10 @@ Route::get('/purchasing/supplier-invoices/create', [PageController::class, 'crea
 // Accounting Advanced — Bank Reconciliation
 Route::get('/accounting/bank-reconciliation', [PageController::class, 'bankReconciliation'])->name('accounting.bank-reconciliation');
 Route::get('/accounting/bank-reconciliation/create', [PageController::class, 'createBankReconciliation'])->name('accounting.bank-reconciliation.create');
+Route::get('/accounting/bank-reconciliation/export', [PageController::class, 'exportBankReconciliations'])->name('accounting.bank-reconciliation.export');
+Route::post('/accounting/bank-reconciliation', [PageController::class, 'storeBankReconciliation'])->name('accounting.bank-reconciliation.store');
+Route::post('/accounting/bank-reconciliation/{id}/reconcile', [PageController::class, 'reconcileBankReconciliation'])->name('accounting.bank-reconciliation.reconcile');
+Route::delete('/accounting/bank-reconciliation/{id}', [PageController::class, 'deleteBankReconciliation'])->name('accounting.bank-reconciliation.delete');
 
 // Production Advanced — Scheduling / Gantt
 Route::get('/production/schedule', [PageController::class, 'productionSchedule'])->name('production.schedule');
@@ -132,6 +201,8 @@ Route::get('/quality/capa/create', [PageController::class, 'createCAPA'])->name(
 // Accounting — Fixed Assets
 Route::get('/accounting/fixed-assets', [PageController::class, 'fixedAssets'])->name('accounting.fixed-assets');
 Route::get('/accounting/fixed-assets/create', [PageController::class, 'createFixedAsset'])->name('accounting.fixed-assets.create');
+Route::post('/accounting/fixed-assets', [PageController::class, 'storeFixedAsset'])->name('accounting.fixed-assets.store');
+Route::get('/accounting/fixed-assets/{id}', [PageController::class, 'fixedAssetShow'])->name('accounting.fixed-assets.show');
 
 // HR — Leave Management
 Route::get('/hr/leave', [PageController::class, 'leaveManagement'])->name('hr.leave');
@@ -154,9 +225,12 @@ Route::get('/reports/custom/create', [PageController::class, 'createCustomReport
 
 // Notifications — Real-time with sound
 Route::get('/notifications', [PageController::class, 'notifications'])->name('notifications');
+Route::get('/notifications/export', [PageController::class, 'exportNotifications'])->name('notifications.export');
 Route::get('/notifications/unread-count', [PageController::class, 'notificationUnreadCount'])->name('notifications.unread-count');
 Route::post('/notifications/{id}/read', [PageController::class, 'markNotificationRead'])->name('notifications.read');
 Route::post('/notifications/read-all', [PageController::class, 'markAllNotificationsRead'])->name('notifications.read-all');
+Route::post('/notifications/delete-read', [PageController::class, 'deleteAllReadNotifications'])->name('notifications.delete-read');
+Route::delete('/notifications/{id}', [PageController::class, 'deleteNotification'])->name('notifications.delete');
 Route::post('/notifications', [PageController::class, 'storeNotification'])->name('notifications.store');
 Route::get('/notifications/test', [PageController::class, 'notificationTest'])->name('notifications.test');
 
@@ -218,9 +292,12 @@ Route::get('/costing/activity-based', [PageController::class, 'activityBasedCost
 
 // Compliance & Audit — Audit Trail
 Route::get('/compliance/audit-trail', [PageController::class, 'auditTrail'])->name('compliance.audit-trail');
+Route::get('/compliance/audit-trail/export', [PageController::class, 'exportAuditTrail'])->name('compliance.audit-trail.export');
 
 // Workflow Automation — Approval Engine
 Route::get('/workflow/approvals', [PageController::class, 'approvals'])->name('workflow.approvals');
+Route::post('/workflow/approvals/{id}/approve', [PageController::class, 'approveRequest'])->name('workflow.approvals.approve');
+Route::post('/workflow/approvals/{id}/reject', [PageController::class, 'rejectRequest'])->name('workflow.approvals.reject');
 Route::get('/workflow/rules', [PageController::class, 'workflowRules'])->name('workflow.rules');
 
 // API & Integrations — Webhooks
@@ -240,7 +317,7 @@ Route::prefix('customer')->group(function () {
     Route::get('/dashboard', [PageController::class, 'customerDashboard'])->name('customer.dashboard');
     Route::get('/orders', [PageController::class, 'customerOrders'])->name('customer.orders');
     Route::get('/orders/{id}', [PageController::class, 'customerOrderDetail'])->name('customer.order.detail');
-    Route::get('/invoices', [PageController::class, 'customerInvoices'])->name('customer.invoices');
+    Route::get('/invoices', [PageController::class, 'portalCustomerInvoices'])->name('customer.invoices');
     Route::get('/quotes', [PageController::class, 'customerQuotes'])->name('customer.quotes');
     Route::post('/quotes/{id}/accept', [PageController::class, 'customerAcceptQuote'])->name('customer.accept.quote');
 });

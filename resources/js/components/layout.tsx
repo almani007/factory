@@ -64,6 +64,7 @@ import {
   BuildingLibrary,
   Briefcase,
   TrendingUp,
+  FolderTree,
   Clock as ClockIcon,
   Users as UsersIcon,
   Package as PackageIcon,
@@ -132,10 +133,13 @@ const NAV_GROUPS: Array<{
     items: [
       { name: "Accounting", href: "/accounting", icon: BookOpen },
       { name: "Chart of Accounts", href: "/accounting/chart-of-accounts", icon: FileText },
-      { name: "Journal Entries", href: "/accounting/journal-entries/create", icon: Plus },
+      { name: "Account Groups", href: "/accounting/account-groups", icon: FolderTree },
+      { name: "Journal Entries", href: "/accounting", icon: BookOpen },
+      { name: "Accounting Periods", href: "/accounting/periods", icon: Calendar },
       { name: "Trial Balance", href: "/accounting/trial-balance", icon: PieChart },
       { name: "Profit & Loss", href: "/accounting/profit-loss", icon: CreditCard },
       { name: "Balance Sheet", href: "/accounting/balance-sheet", icon: CreditCard },
+      { name: "Cash Flow", href: "/accounting/cash-flow", icon: Banknote },
       { name: "Bank Reconciliation", href: "/accounting/bank-reconciliation", icon: Banknote },
       { name: "Fixed Assets", href: "/accounting/fixed-assets", icon: Building2 },
     ],
@@ -315,14 +319,10 @@ export function AppLayout({ children, title }: AppLayoutProps) {
             />
           </form>
 
-          <button
-            type="button"
-            className="relative rounded-xl p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
-            aria-label="Notifications"
-          >
-            <Bell size={19} />
-            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white animate-pulse" />
-          </button>
+          <NotificationBell
+            unreadCount={props?.unread_count ?? 0}
+            notifications={props?.notifications ?? []}
+          />
 
           <div className="flex items-center gap-2.5 border-l border-slate-200 pl-3 sm:pl-4">
             <div className="hidden flex-col items-end leading-tight sm:flex">

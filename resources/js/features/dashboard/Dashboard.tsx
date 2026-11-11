@@ -45,6 +45,8 @@ export default function Dashboard() {
     actual_unit_cost: 0,
   };
   const activity: ActivityItem[] = data?.activity || [];
+  const alerts = data?.alerts || {};
+  const quickLinks = data?.quick_links || [];
   const monthlyProduction: Array<{ month: string; qty: number }> =
     data?.monthly_production?.data || [];
   const revenueByMonth: Array<{ month: string; revenue: number }> =
@@ -227,20 +229,55 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-3 mt-6">
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base font-semibold text-slate-900">ERP Alerts</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3 text-sm">
+              {[
+                { label: 'Pending approvals', value: alerts.pending_approvals ?? 0, href: '/workflow/approvals' },
+                { label: 'Unread notifications', value: alerts.unread_notifications ?? 0, href: '/notifications' },
+                { label: 'Open purchase orders', value: alerts.open_purchase_orders ?? 0, href: '/purchasing' },
+                { label: 'Overdue sales invoices', value: alerts.overdue_sales_invoices ?? 0, href: '/sales/invoices' },
+              ].map((item) => (
+                <Link key={item.label} href={item.href} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50">
+                  <span className="text-slate-700">{item.label}</span>
+                  <span className={`font-semibold ${Number(item.value) > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>{item.value}</span>
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base font-semibold text-slate-900">Quick Actions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-2">
+              {(quickLinks.length ? quickLinks : [
+                { label: 'Warehouses', href: '/warehouses' },
+                { label: 'Notifications', href: '/notifications' },
+              ]).map((link: any) => (
+                <Link key={link.href} href={link.href} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-factory-700">
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="flex items-center justify-between pb-4">
             <CardTitle className="text-base font-semibold text-slate-900">Recent Activity</CardTitle>
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              Live
-            </span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Live</span>
           </CardHeader>
           <CardContent className="p-0">
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-slate-100 px-6 pb-4">
               {activity.length === 0 ? (
-                <li className="py-8 text-center text-sm text-slate-500">
-                  No recent activity yet.
-                </li>
+                <li className="py-8 text-center text-sm text-slate-500">No recent activity yet.</li>
               ) : (
                 activity.map((item, index) => (
                   <li key={`${item.title}-${index}`} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">

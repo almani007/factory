@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -169,7 +170,7 @@ class PageController extends Controller
         }
 
         if (in_array($userRoleKey, ['super_admin', 'admin', 'manager', 'operator'])) {
-            $roleData['work_orders_today'] = (int) DB::table('work_orders')->where('tenant_id', $tenantId)->whereDate('planned_start_date', today())->count();
+            $roleData['work_orders_today'] = (int) DB::table('work_orders')->where('tenant_id', $tenantId)->whereDate('started_at', today())->count();
             $roleData['quality_pending'] = (int) DB::table('quality_inspections')->where('tenant_id', $tenantId)->where('status', 'pending')->count();
             $roleData['low_stock_items'] = (int) DB::table('stock_balances as sb')
                 ->join('items as i', 'i.id', '=', 'sb.item_id')
@@ -177,6 +178,21 @@ class PageController extends Controller
                 ->whereColumn('sb.on_hand', '<', 'i.reorder_level')
                 ->count();
         }
+
+        $alerts = [];
+        try { $alerts['pending_approvals'] = (int) DB::table('approval_requests')->where('tenant_id', $tenantId)->where('status', 'pending')->count(); } catch (\Throwable $e) { $alerts['pending_approvals'] = 0; }
+        try { $alerts['unread_notifications'] = (int) DB::table('notifications')->where('tenant_id', $tenantId)->whereNull('read_at')->count(); } catch (\Throwable $e) { $alerts['unread_notifications'] = 0; }
+        try { $alerts['open_purchase_orders'] = (int) DB::table('purchase_orders')->where('tenant_id', $tenantId)->whereNotIn('status', ['received', 'closed', 'cancelled'])->count(); } catch (\Throwable $e) { $alerts['open_purchase_orders'] = 0; }
+        try { $alerts['overdue_sales_invoices'] = (int) DB::table('customer_invoices')->where('tenant_id', $tenantId)->where('status', '!=', 'paid')->whereNotNull('due_date')->where('due_date', '<', now()->toDateString())->count(); } catch (\Throwable $e) { $alerts['overdue_sales_invoices'] = 0; }
+
+        $quick_links = [
+            ['label' => 'Create Sales Quote', 'href' => '/sales/quotes/create'],
+            ['label' => 'New Purchase Order', 'href' => '/purchasing/create'],
+            ['label' => 'Run MRP', 'href' => '/mrp/run'],
+            ['label' => 'View Approvals', 'href' => '/workflow/approvals'],
+            ['label' => 'Audit Trail', 'href' => '/compliance/audit-trail'],
+            ['label' => 'Notifications', 'href' => '/notifications'],
+        ];
 
         return Inertia::render('Dashboard', [
             'user_role' => $userRole,
@@ -190,6 +206,8 @@ class PageController extends Controller
                 'actual_unit_cost' => round($unitCost, 2),
             ],
             'role_stats' => $roleData,
+            'alerts' => $alerts,
+            'quick_links' => $quick_links,
             'activity' => $activity,
         ]);
     }
@@ -541,11 +559,31 @@ class PageController extends Controller
     {
         $tenantId = $this->tenantId();
 
+        $status = (string) $request->query('status', '');
+        $from = $request->query('from');
+        $to = $request->query('to');
+
         $query = DB::table('journal_entries')
             ->where('tenant_id', $tenantId)
             ->select(['id', 'reference', 'document_date', 'status', 'description'])
+            ->selectSub(function ($sub) {
+                $sub->from('journal_lines')
+                    ->selectRaw('COALESCE(SUM(debit_amount_base), 0)')
+                    ->whereColumn('journal_lines.entry_id', 'journal_entries.id');
+            }, 'debit_total')
+            ->selectSub(function ($sub) {
+                $sub->from('journal_lines')
+                    ->selectRaw('COALESCE(SUM(credit_amount_base), 0)')
+                    ->whereColumn('journal_lines.entry_id', 'journal_entries.id');
+            }, 'credit_total')
             ->orderByDesc('document_date')
             ->orderByDesc('id');
+
+        if (in_array($status, ['draft', 'submitted', 'posted', 'reversed'], true)) {
+            $query->where('status', $status);
+        }
+        if ($from) $query->whereDate('document_date', '>=', $from);
+        if ($to) $query->whereDate('document_date', '<=', $to);
 
         $payload = $this->paginate(
             $this->search($query, $request->query('q'), ['reference', 'description'])
@@ -553,6 +591,8 @@ class PageController extends Controller
 
         $payload['data'] = array_map(function (array $row) {
             $row['document_date'] = $this->day($row['document_date']);
+            $row['debit_total'] = (float) ($row['debit_total'] ?? 0);
+            $row['credit_total'] = (float) ($row['credit_total'] ?? 0);
 
             return $row;
         }, $payload['data']);
@@ -573,8 +613,25 @@ class PageController extends Controller
             ->whereNotIn('status', ['paid', 'cancelled'])
             ->sum('total_amount');
 
+        $statusCounts = DB::table('journal_entries')
+            ->where('tenant_id', $tenantId)
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw("COUNT(*) FILTER (WHERE status = 'draft') as draft")
+            ->selectRaw("COUNT(*) FILTER (WHERE status = 'submitted') as submitted")
+            ->selectRaw("COUNT(*) FILTER (WHERE status = 'posted') as posted")
+            ->selectRaw("COUNT(*) FILTER (WHERE status = 'reversed') as reversed")
+            ->first();
+
         return Inertia::render('Accounting', [
             'journal_entries' => $payload,
+            'filters' => ['q' => (string) $request->query('q', ''), 'status' => $status, 'from' => $from ?? '', 'to' => $to ?? ''],
+            'journal_entry_counts' => [
+                'total' => (int) ($statusCounts->total ?? 0),
+                'draft' => (int) ($statusCounts->draft ?? 0),
+                'submitted' => (int) ($statusCounts->submitted ?? 0),
+                'posted' => (int) ($statusCounts->posted ?? 0),
+                'reversed' => (int) ($statusCounts->reversed ?? 0),
+            ],
             'finance_summary' => [
                 'trial_balance' => $this->money($trialBalance),
                 'receivable' => $this->money($receivable),
@@ -583,53 +640,172 @@ class PageController extends Controller
         ]);
     }
 
-    public function chartOfAccounts(): Response
+    public function chartOfAccounts(Request $request): Response
     {
         $tenantId = $this->tenantId();
+        $q = trim((string) $request->query('q', ''));
+        $type = $request->query('type');
+        $status = $request->query('status');
+        $usage = $request->query('usage'); // used|unused
+        $posting = $request->query('posting'); // direct|blocked
+        $flag = $request->query('flag'); // cash|bank
+        $hasChildren = $request->query('has_children'); // yes|no
+        $groupId = $request->query('group');
+
+        $childrenSub = DB::table('chart_of_accounts as c2')
+            ->selectRaw('COUNT(*)')
+            ->whereColumn('c2.parent_id', 'coa.id')
+            ->where('c2.tenant_id', $tenantId);
+        $journalSub = DB::table('journal_lines as jl')
+            ->selectRaw('COUNT(*)')
+            ->whereColumn('jl.account_id', 'coa.id')
+            ->where('jl.tenant_id', $tenantId);
+        $balanceSub = DB::table('journal_lines as jlb')
+            ->join('journal_entries as je', 'je.id', '=', 'jlb.entry_id')
+            ->selectRaw('COALESCE(SUM(jlb.debit_amount_base - jlb.credit_amount_base), 0)')
+            ->whereColumn('jlb.account_id', 'coa.id')
+            ->where('jlb.tenant_id', $tenantId)
+            ->where('je.status', 'posted');
 
         $query = DB::table('chart_of_accounts as coa')
+            ->leftJoin('chart_of_accounts as parent', 'parent.id', '=', 'coa.parent_id')
+            ->leftJoin('account_groups as ag', 'ag.id', '=', 'coa.account_group_id')
             ->where('coa.tenant_id', $tenantId)
             ->select([
-                'coa.id',
-                'coa.code',
-                'coa.name',
-                'coa.type',
-                'coa.allow_direct_posting',
-                'coa.is_cash_account',
-                'coa.is_bank_account',
+                'coa.id', 'coa.code', 'coa.name', 'coa.type',
+                'coa.allow_direct_posting', 'coa.is_cash_account', 'coa.is_bank_account', 'coa.is_active',
+                'coa.parent_id', 'coa.account_group_id',
+                'parent.code as parent_code', 'parent.name as parent_name',
+                'ag.name as group_name',
             ])
+            ->selectSub($childrenSub, 'children_count')
+            ->selectSub($journalSub, 'journal_lines_count')
+            ->selectSub($balanceSub, 'posted_balance')
             ->orderBy('coa.code');
 
-        $payload = $this->paginate($query);
+        if ($q !== '') {
+            $query->where(function ($nested) use ($q) {
+                $nested->where('coa.code', 'ilike', "%{$q}%")
+                    ->orWhere('coa.name', 'ilike', "%{$q}%")
+                    ->orWhere('parent.name', 'ilike', "%{$q}%")
+                    ->orWhere('ag.name', 'ilike', "%{$q}%");
+            });
+        }
+        if ($type && $type !== 'all') $query->where('coa.type', $type);
+        if ($status === 'active') $query->where('coa.is_active', true);
+        elseif ($status === 'inactive') $query->where('coa.is_active', false);
 
-        $payload['data'] = array_map(function (array $row) {
-            $row['allow_direct_posting'] = (bool) $row['allow_direct_posting'];
-            $row['is_cash_account'] = (bool) $row['is_cash_account'];
-            $row['is_bank_account'] = (bool) $row['is_bank_account'];
+        if ($posting === 'direct') $query->where('coa.allow_direct_posting', true);
+        elseif ($posting === 'blocked') $query->where('coa.allow_direct_posting', false);
 
+        if ($flag === 'cash') $query->where('coa.is_cash_account', true);
+        elseif ($flag === 'bank') $query->where('coa.is_bank_account', true);
+
+        if ($groupId) $query->where('coa.account_group_id', $groupId);
+
+        if ($usage === 'used') $query->whereRaw('(SELECT COUNT(*) FROM journal_lines jl2 WHERE jl2.account_id = coa.id AND jl2.tenant_id = ?) > 0', [$tenantId]);
+        elseif ($usage === 'unused') $query->whereRaw('(SELECT COUNT(*) FROM journal_lines jl2 WHERE jl2.account_id = coa.id AND jl2.tenant_id = ?) = 0', [$tenantId]);
+
+        if ($hasChildren === 'yes') $query->whereRaw('(SELECT COUNT(*) FROM chart_of_accounts c3 WHERE c3.parent_id = coa.id AND c3.tenant_id = ?) > 0', [$tenantId]);
+        elseif ($hasChildren === 'no') $query->whereRaw('(SELECT COUNT(*) FROM chart_of_accounts c3 WHERE c3.parent_id = coa.id AND c3.tenant_id = ?) = 0', [$tenantId]);
+
+        $normalize = function (array $row) {
+            $row['allow_direct_posting'] = (bool) ($row['allow_direct_posting'] ?? false);
+            $row['is_cash_account'] = (bool) ($row['is_cash_account'] ?? false);
+            $row['is_bank_account'] = (bool) ($row['is_bank_account'] ?? false);
+            $row['is_active'] = (bool) ($row['is_active'] ?? true);
+            $row['children_count'] = (int) ($row['children_count'] ?? 0);
+            $row['journal_lines_count'] = (int) ($row['journal_lines_count'] ?? 0);
+            $row['posted_balance'] = (float) ($row['posted_balance'] ?? 0);
+            $row['can_delete'] = $row['children_count'] === 0 && $row['journal_lines_count'] === 0;
+            $row['parent_label'] = $row['parent_code'] ? ($row['parent_code'] . ' — ' . ($row['parent_name'] ?? '')) : null;
             return $row;
-        }, $payload['data']);
+        };
+
+        $view = $request->query('view') === 'tree' ? 'tree' : 'table';
+
+        $tree = null;
+        if ($view === 'tree') {
+            $allRows = (clone $query)->limit(5000)->get()
+                ->map(static fn ($r) => $normalize((array) $r))
+                ->all();
+            $tree = $this->buildAccountTree($allRows);
+        }
+
+        $payload = $this->paginate($query);
+        $payload['data'] = array_map($normalize, $payload['data']);
 
         $byType = DB::table('chart_of_accounts')
             ->where('tenant_id', $tenantId)
             ->selectRaw('type, COUNT(*) as count')
             ->groupBy('type')
-            ->get();
+            ->pluck('count', 'type')
+            ->toArray();
 
         $typeCounts = [];
-        foreach ($byType as $t) {
-            $typeCounts[$t->type] = (int) $t->count;
-        }
+        foreach ($byType as $k => $v) $typeCounts[$k] = (int) $v;
+
+        $summary = [
+            'total' => (int) DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->count(),
+            'active' => (int) DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->where('is_active', true)->count(),
+            'inactive' => (int) DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->where('is_active', false)->count(),
+            'posting' => (int) DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->where('allow_direct_posting', true)->count(),
+        ];
+
+        $groupOptions = DB::table('account_groups')
+            ->where('tenant_id', $tenantId)
+            ->select(['id', 'code', 'name'])
+            ->orderBy('code')
+            ->get();
 
         return Inertia::render('AccountingChartOfAccounts', [
             'accounts' => $payload,
             'type_counts' => $typeCounts,
+            'summary' => $summary,
+            'groups' => $groupOptions,
+            'filters' => [
+                'q' => $q,
+                'type' => $type ?? 'all',
+                'status' => $status ?? 'all',
+                'usage' => $usage ?? 'all',
+                'posting' => $posting ?? 'all',
+                'flag' => $flag ?? 'all',
+                'has_children' => $hasChildren ?? 'all',
+                'group' => $groupId ?? 'all',
+                'view' => $view,
+            ],
+            'tree' => $tree,
+            'view' => $view,
         ]);
     }
 
-    public function trialBalancePage(): Response
+    private function buildAccountTree(array $rows): array
+    {
+        $byId = [];
+        foreach ($rows as $row) {
+            $row['children'] = [];
+            $byId[$row['id']] = $row;
+        }
+
+        $roots = [];
+        foreach (array_keys($byId) as $id) {
+            $node = &$byId[$id];
+            $parentId = $node['parent_id'] ?? null;
+            if ($parentId && isset($byId[$parentId]) && (string) $parentId !== (string) $id) {
+                $byId[$parentId]['children'][] = &$node;
+            } else {
+                $roots[] = &$node;
+            }
+            unset($node);
+        }
+
+        return $roots;
+    }
+
+    public function trialBalancePage(Request $request): Response
     {
         $tenantId = $this->tenantId();
+        $asOf = $request->query('as_of');
 
         $accounts = DB::table('chart_of_accounts as coa')
             ->where('coa.tenant_id', $tenantId)
@@ -638,24 +814,28 @@ class PageController extends Controller
             ->orderBy('coa.code')
             ->get();
 
-        $rows = $accounts->map(function ($account) use ($tenantId) {
-            $debit = (float) DB::table('journal_lines as jl')
+        $rows = $accounts->map(function ($account) use ($tenantId, $asOf) {
+            $debitQuery = DB::table('journal_lines as jl')
                 ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
                 ->where('je.tenant_id', $tenantId)
                 ->where('je.status', 'posted')
-                ->where('jl.account_id', $account->id)
-                ->sum('jl.debit_amount_base');
+                ->where('jl.account_id', $account->id);
+            if ($asOf) $debitQuery->whereDate('je.posting_date', '<=', $asOf);
 
-            $credit = (float) DB::table('journal_lines as jl')
+            $creditQuery = DB::table('journal_lines as jl')
                 ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
                 ->where('je.tenant_id', $tenantId)
                 ->where('je.status', 'posted')
-                ->where('jl.account_id', $account->id)
-                ->sum('jl.credit_amount_base');
+                ->where('jl.account_id', $account->id);
+            if ($asOf) $creditQuery->whereDate('je.posting_date', '<=', $asOf);
+
+            $debit = (float) $debitQuery->sum('jl.debit_amount_base');
+            $credit = (float) $creditQuery->sum('jl.credit_amount_base');
 
             $balance = $debit - $credit;
 
             return [
+                'account_id' => $account->id,
                 'account_code' => $account->code,
                 'account_name' => $account->name,
                 'account_type' => $account->type,
@@ -672,12 +852,15 @@ class PageController extends Controller
             'total_debit' => $totalDebit,
             'total_credit' => $totalCredit,
             'is_balanced' => abs($totalDebit - $totalCredit) < 0.01,
+            'filters' => ['as_of' => $asOf ?? ''],
         ]);
     }
 
-    public function profitAndLossPage(): Response
+    public function profitAndLossPage(Request $request): Response
     {
         $tenantId = $this->tenantId();
+        $from = $request->query('from');
+        $to = $request->query('to');
 
         $revenueAccounts = DB::table('chart_of_accounts')
             ->where('tenant_id', $tenantId)
@@ -691,22 +874,27 @@ class PageController extends Controller
             ->select(['id', 'code', 'name'])
             ->get();
 
-        $getAccountTurnover = function (array $account) use ($tenantId) {
-            $debit = (float) DB::table('journal_lines as jl')
+        $getAccountTurnover = function (array $account) use ($tenantId, $from, $to) {
+            $debitQuery = DB::table('journal_lines as jl')
                 ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
                 ->where('je.tenant_id', $tenantId)
                 ->where('je.status', 'posted')
-                ->where('jl.account_id', $account['id'])
-                ->sum('jl.debit_amount_base');
+                ->where('jl.account_id', $account['id']);
+            $creditQuery = clone $debitQuery;
+            if ($from) {
+                $debitQuery->whereDate('je.posting_date', '>=', $from);
+                $creditQuery->whereDate('je.posting_date', '>=', $from);
+            }
+            if ($to) {
+                $debitQuery->whereDate('je.posting_date', '<=', $to);
+                $creditQuery->whereDate('je.posting_date', '<=', $to);
+            }
 
-            $credit = (float) DB::table('journal_lines as jl')
-                ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
-                ->where('je.tenant_id', $tenantId)
-                ->where('je.status', 'posted')
-                ->where('jl.account_id', $account['id'])
-                ->sum('jl.credit_amount_base');
+            $debit = (float) $debitQuery->sum('jl.debit_amount_base');
+            $credit = (float) $creditQuery->sum('jl.credit_amount_base');
 
             return [
+                'account_id' => $account['id'],
                 'code' => $account['code'],
                 'name' => $account['name'],
                 'turnover' => $credit - $debit,
@@ -726,12 +914,14 @@ class PageController extends Controller
             'total_revenue' => $totalRevenue,
             'total_expenses' => $totalExpenses,
             'net_profit' => $netProfit,
+            'filters' => ['from' => $from ?? '', 'to' => $to ?? ''],
         ]);
     }
 
-    public function balanceSheetPage(): Response
+    public function balanceSheetPage(Request $request): Response
     {
         $tenantId = $this->tenantId();
+        $asOf = $request->query('as_of');
 
         $assetAccounts = DB::table('chart_of_accounts')
             ->where('tenant_id', $tenantId)
@@ -751,22 +941,23 @@ class PageController extends Controller
             ->select(['id', 'code', 'name'])
             ->get();
 
-        $getAccountBalance = function (array $account) use ($tenantId) {
-            $debit = (float) DB::table('journal_lines as jl')
+        $getAccountBalance = function (array $account) use ($tenantId, $asOf) {
+            $debitQuery = DB::table('journal_lines as jl')
                 ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
                 ->where('je.tenant_id', $tenantId)
                 ->where('je.status', 'posted')
-                ->where('jl.account_id', $account['id'])
-                ->sum('jl.debit_amount_base');
+                ->where('jl.account_id', $account['id']);
+            $creditQuery = clone $debitQuery;
+            if ($asOf) {
+                $debitQuery->whereDate('je.posting_date', '<=', $asOf);
+                $creditQuery->whereDate('je.posting_date', '<=', $asOf);
+            }
 
-            $credit = (float) DB::table('journal_lines as jl')
-                ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
-                ->where('je.tenant_id', $tenantId)
-                ->where('je.status', 'posted')
-                ->where('jl.account_id', $account['id'])
-                ->sum('jl.credit_amount_base');
+            $debit = (float) $debitQuery->sum('jl.debit_amount_base');
+            $credit = (float) $creditQuery->sum('jl.credit_amount_base');
 
             return [
+                'account_id' => $account['id'],
                 'code' => $account['code'],
                 'name' => $account['name'],
                 'balance' => $debit - $credit,
@@ -788,17 +979,2348 @@ class PageController extends Controller
             'total_assets' => $totalAssets,
             'total_liabilities' => $totalLiabilities,
             'total_equity' => $totalEquity,
+            'filters' => ['as_of' => $asOf ?? ''],
         ]);
     }
 
-    public function createJournalEntry(): Response
+    /**
+     * Cash flow statement derived from posted journal entries that touch
+     * cash/bank accounts. Counterpart accounts are classified as operating,
+     * investing, or financing based on their account type.
+     */
+    public function cashFlowPage(Request $request): Response
     {
-        return Inertia::render('Accounting/JournalEntryCreate');
+        $tenantId = $this->tenantId();
+        $from = $request->query('from');
+        $to = $request->query('to');
+
+        $cashAccountIds = DB::table('chart_of_accounts')
+            ->where('tenant_id', $tenantId)
+            ->where(function ($q) {
+                $q->where('is_cash_account', true)->orWhere('is_bank_account', true);
+            })
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $opening = 0.0;
+        if (!empty($cashAccountIds) && $from) {
+            $openingQuery = DB::table('journal_lines as jl')
+                ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
+                ->where('je.tenant_id', $tenantId)
+                ->where('je.status', 'posted')
+                ->whereIn('jl.account_id', $cashAccountIds)
+                ->whereDate('je.posting_date', '<', $from);
+            try {
+                $opening = (float) $openingQuery->selectRaw('COALESCE(SUM(jl.debit_amount_base - jl.credit_amount_base), 0) as bal')->value('bal');
+            } catch (\Throwable $e) {
+                $opening = 0.0;
+            }
+        }
+
+        $closing = 0.0;
+        if (!empty($cashAccountIds)) {
+            $closingQuery = DB::table('journal_lines as jl')
+                ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
+                ->where('je.tenant_id', $tenantId)
+                ->where('je.status', 'posted')
+                ->whereIn('jl.account_id', $cashAccountIds);
+            if ($to) $closingQuery->whereDate('je.posting_date', '<=', $to);
+            try {
+                $closing = (float) $closingQuery->selectRaw('COALESCE(SUM(jl.debit_amount_base - jl.credit_amount_base), 0) as bal')->value('bal');
+            } catch (\Throwable $e) {
+                $closing = 0.0;
+            }
+        }
+
+        $rows = collect();
+        if (!empty($cashAccountIds)) {
+            $query = DB::table('journal_lines as jl')
+                ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
+                ->join('chart_of_accounts as coa', 'coa.id', '=', 'jl.account_id')
+                ->where('je.tenant_id', $tenantId)
+                ->where('je.status', 'posted')
+                ->whereNotIn('jl.account_id', $cashAccountIds)
+                ->whereExists(function ($sub) use ($tenantId, $cashAccountIds) {
+                    $sub->selectRaw('1')
+                        ->from('journal_lines as jlc')
+                        ->whereColumn('jlc.entry_id', 'jl.entry_id')
+                        ->where('jlc.tenant_id', $tenantId)
+                        ->whereIn('jlc.account_id', $cashAccountIds);
+                });
+
+            if ($from) $query->whereDate('je.posting_date', '>=', $from);
+            if ($to) $query->whereDate('je.posting_date', '<=', $to);
+
+            try {
+                $raw = $query->select([
+                    'jl.account_id',
+                    'coa.code as account_code',
+                    'coa.name as account_name',
+                    'coa.type as account_type',
+                ])
+                    ->selectRaw('COALESCE(SUM(jl.credit_amount_base - jl.debit_amount_base), 0) as net')
+                    ->selectRaw('COALESCE(SUM(jl.credit_amount_base), 0) as credit_total')
+                    ->selectRaw('COALESCE(SUM(jl.debit_amount_base), 0) as debit_total')
+                    ->groupBy('jl.account_id', 'coa.code', 'coa.name', 'coa.type')
+                    ->orderBy('coa.code')
+                    ->get();
+
+                $rows = $raw->map(function ($r) {
+                    $type = (string) ($r->account_type ?? '');
+                    $category = in_array($type, ['revenue', 'expense'], true)
+                        ? 'operating'
+                        : ($type === 'asset' ? 'investing' : (in_array($type, ['liability', 'equity'], true) ? 'financing' : 'operating'));
+
+                    $net = (float) $r->net;
+                    return [
+                        'account_id' => $r->account_id,
+                        'account_code' => $r->account_code,
+                        'account_name' => $r->account_name,
+                        'account_type' => $type,
+                        'category' => $category,
+                        'inflow' => $net > 0 ? $net : 0,
+                        'outflow' => $net < 0 ? abs($net) : 0,
+                        'net' => $net,
+                        'gross_inflow' => (float) $r->credit_total,
+                        'gross_outflow' => (float) $r->debit_total,
+                    ];
+                })->values();
+            } catch (\Throwable $e) {
+                $rows = collect();
+            }
+        }
+
+        $categories = [];
+        foreach (['operating' => 'Operating Activities', 'investing' => 'Investing Activities', 'financing' => 'Financing Activities'] as $key => $label) {
+            $subset = $rows->where('category', $key)->values();
+            $categories[] = [
+                'key' => $key,
+                'label' => $label,
+                'accounts' => $subset,
+                'inflow' => (float) $subset->sum('inflow'),
+                'outflow' => (float) $subset->sum('outflow'),
+                'net' => (float) $subset->sum('net'),
+            ];
+        }
+
+        $netChange = (float) $rows->sum('net');
+
+        return Inertia::render('Accounting/CashFlow', [
+            'categories' => $categories,
+            'summary' => [
+                'opening_cash' => $opening,
+                'net_change' => $netChange,
+                'closing_cash' => $closing,
+                'reconciled' => abs(($opening + $netChange) - $closing) < 0.01,
+                'cash_accounts' => count($cashAccountIds),
+                'line_count' => $rows->count(),
+            ],
+            'filters' => ['from' => $from ?? '', 'to' => $to ?? ''],
+        ]);
     }
 
-    public function createAccountPage(): Response
+    public function exportCashFlow(Request $request)
     {
-        return Inertia::render('Accounting/AccountCreate');
+        $tenantId = $this->tenantId();
+        $from = $request->query('from');
+        $to = $request->query('to');
+
+        $cashAccountIds = DB::table('chart_of_accounts')
+            ->where('tenant_id', $tenantId)
+            ->where(function ($q) {
+                $q->where('is_cash_account', true)->orWhere('is_bank_account', true);
+            })
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $rows = collect();
+        if (!empty($cashAccountIds)) {
+            $query = DB::table('journal_lines as jl')
+                ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
+                ->join('chart_of_accounts as coa', 'coa.id', '=', 'jl.account_id')
+                ->where('je.tenant_id', $tenantId)
+                ->where('je.status', 'posted')
+                ->whereNotIn('jl.account_id', $cashAccountIds)
+                ->whereExists(function ($sub) use ($tenantId, $cashAccountIds) {
+                    $sub->selectRaw('1')
+                        ->from('journal_lines as jlc')
+                        ->whereColumn('jlc.entry_id', 'jl.entry_id')
+                        ->where('jlc.tenant_id', $tenantId)
+                        ->whereIn('jlc.account_id', $cashAccountIds);
+                });
+            if ($from) $query->whereDate('je.posting_date', '>=', $from);
+            if ($to) $query->whereDate('je.posting_date', '<=', $to);
+
+            try {
+                $rows = $query->select([
+                    'coa.code as account_code', 'coa.name as account_name', 'coa.type as account_type',
+                ])->selectRaw('COALESCE(SUM(jl.credit_amount_base - jl.debit_amount_base), 0) as net')
+                    ->groupBy('coa.code', 'coa.name', 'coa.type')
+                    ->orderBy('coa.code')
+                    ->get();
+            } catch (\Throwable $e) {
+                $rows = collect();
+            }
+        }
+
+        return response()->streamDownload(function () use ($rows, $from, $to) {
+            $out = fopen('php://output', 'w');
+            if ($from || $to) fputcsv($out, ['Period', ($from ?: 'Start') . ' to ' . ($to ?: 'Today')]);
+            fputcsv($out, ['Category', 'Account Code', 'Account Name', 'Net Cash Flow']);
+            foreach ($rows as $r) {
+                $type = (string) $r->account_type;
+                $category = in_array($type, ['revenue', 'expense'], true)
+                    ? 'Operating'
+                    : ($type === 'asset' ? 'Investing' : (in_array($type, ['liability', 'equity'], true) ? 'Financing' : 'Operating'));
+                fputcsv($out, [$category, $r->account_code, $r->account_name, (float) $r->net]);
+            }
+            fclose($out);
+        }, 'cash_flow_' . now()->format('Ymd_His') . '.csv', ['Content-Type' => 'text/csv']);
+    }
+
+    public function exportTrialBalance(Request $request)
+    {
+        $tenantId = $this->tenantId();
+        $asOf = $request->query('as_of');
+        $accounts = DB::table('chart_of_accounts')
+            ->where('tenant_id', $tenantId)
+            ->where('allow_direct_posting', true)
+            ->select(['id', 'code', 'name', 'type'])
+            ->orderBy('code')
+            ->get();
+
+        $rows = [];
+        foreach ($accounts as $account) {
+            $debitQuery = DB::table('journal_lines as jl')
+                ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
+                ->where('je.tenant_id', $tenantId)->where('je.status', 'posted')
+                ->where('jl.account_id', $account->id);
+            $creditQuery = clone $debitQuery;
+            if ($asOf) {
+                $debitQuery->whereDate('je.posting_date', '<=', $asOf);
+                $creditQuery->whereDate('je.posting_date', '<=', $asOf);
+            }
+            $debit = (float) $debitQuery->sum('jl.debit_amount_base');
+            $credit = (float) $creditQuery->sum('jl.credit_amount_base');
+            $balance = $debit - $credit;
+            $rows[] = [
+                'code' => $account->code, 'name' => $account->name, 'type' => $account->type,
+                'debit' => $balance > 0 ? $balance : 0, 'credit' => $balance < 0 ? abs($balance) : 0,
+            ];
+        }
+
+        return response()->streamDownload(function () use ($rows, $asOf) {
+            $out = fopen('php://output', 'w');
+            if ($asOf) fputcsv($out, ['As of', $asOf]);
+            fputcsv($out, ['Account Code', 'Account Name', 'Type', 'Debit Balance', 'Credit Balance']);
+            foreach ($rows as $r) fputcsv($out, [$r['code'], $r['name'], $r['type'], $r['debit'], $r['credit']]);
+            fputcsv($out, ['', '', 'Total', array_sum(array_column($rows, 'debit')), array_sum(array_column($rows, 'credit'))]);
+            fclose($out);
+        }, 'trial_balance_' . now()->format('Ymd_His') . '.csv', ['Content-Type' => 'text/csv']);
+    }
+
+    public function exportProfitAndLoss(Request $request)
+    {
+        $tenantId = $this->tenantId();
+        $from = $request->query('from');
+        $to = $request->query('to');
+        $accounts = DB::table('chart_of_accounts')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('type', ['revenue', 'expense'])
+            ->select(['id', 'code', 'name', 'type'])
+            ->orderBy('code')
+            ->get();
+
+        $rows = [];
+        foreach ($accounts as $account) {
+            $debitQuery = DB::table('journal_lines as jl')
+                ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
+                ->where('je.tenant_id', $tenantId)->where('je.status', 'posted')
+                ->where('jl.account_id', $account->id);
+            $creditQuery = clone $debitQuery;
+            if ($from) {
+                $debitQuery->whereDate('je.posting_date', '>=', $from);
+                $creditQuery->whereDate('je.posting_date', '>=', $from);
+            }
+            if ($to) {
+                $debitQuery->whereDate('je.posting_date', '<=', $to);
+                $creditQuery->whereDate('je.posting_date', '<=', $to);
+            }
+            $debit = (float) $debitQuery->sum('jl.debit_amount_base');
+            $credit = (float) $creditQuery->sum('jl.credit_amount_base');
+            $rows[] = [
+                'code' => $account->code, 'name' => $account->name, 'type' => $account->type,
+                'turnover' => $account->type === 'revenue' ? ($credit - $debit) : ($debit - $credit),
+            ];
+        }
+
+        return response()->streamDownload(function () use ($rows, $from, $to) {
+            $out = fopen('php://output', 'w');
+            if ($from || $to) fputcsv($out, ['Period', ($from ?: 'Start') . ' to ' . ($to ?: 'Today')]);
+            fputcsv($out, ['Account Code', 'Account Name', 'Type', 'Turnover']);
+            foreach ($rows as $r) fputcsv($out, [$r['code'], $r['name'], $r['type'], $r['turnover']]);
+            $revenue = array_sum(array_map(static fn ($r) => $r['type'] === 'revenue' ? $r['turnover'] : 0, $rows));
+            $expense = array_sum(array_map(static fn ($r) => $r['type'] === 'expense' ? $r['turnover'] : 0, $rows));
+            fputcsv($out, ['', '', 'Total Revenue', $revenue]);
+            fputcsv($out, ['', '', 'Total Expenses', $expense]);
+            fputcsv($out, ['', '', 'Net Profit', $revenue - $expense]);
+            fclose($out);
+        }, 'profit_and_loss_' . now()->format('Ymd_His') . '.csv', ['Content-Type' => 'text/csv']);
+    }
+
+    public function exportBalanceSheet(Request $request)
+    {
+        $tenantId = $this->tenantId();
+        $asOf = $request->query('as_of');
+        $accounts = DB::table('chart_of_accounts')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('type', ['asset', 'liability', 'equity'])
+            ->select(['id', 'code', 'name', 'type'])
+            ->orderBy('code')
+            ->get();
+
+        $rows = [];
+        foreach ($accounts as $account) {
+            $debitQuery = DB::table('journal_lines as jl')
+                ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
+                ->where('je.tenant_id', $tenantId)->where('je.status', 'posted')
+                ->where('jl.account_id', $account->id);
+            $creditQuery = clone $debitQuery;
+            if ($asOf) {
+                $debitQuery->whereDate('je.posting_date', '<=', $asOf);
+                $creditQuery->whereDate('je.posting_date', '<=', $asOf);
+            }
+            $debit = (float) $debitQuery->sum('jl.debit_amount_base');
+            $credit = (float) $creditQuery->sum('jl.credit_amount_base');
+            $rows[] = ['code' => $account->code, 'name' => $account->name, 'type' => $account->type, 'balance' => $debit - $credit];
+        }
+
+        return response()->streamDownload(function () use ($rows, $asOf) {
+            $out = fopen('php://output', 'w');
+            if ($asOf) fputcsv($out, ['As of', $asOf]);
+            fputcsv($out, ['Account Code', 'Account Name', 'Type', 'Balance']);
+            foreach ($rows as $r) fputcsv($out, [$r['code'], $r['name'], $r['type'], $r['balance']]);
+            foreach (['asset' => 'Total Assets', 'liability' => 'Total Liabilities', 'equity' => 'Total Equity'] as $type => $label) {
+                $total = array_sum(array_map(static fn ($r) => $r['type'] === $type ? $r['balance'] : 0, $rows));
+                fputcsv($out, ['', '', $label, $total]);
+            }
+            fclose($out);
+        }, 'balance_sheet_' . now()->format('Ymd_His') . '.csv', ['Content-Type' => 'text/csv']);
+    }
+
+    public function createJournalEntry(Request $request): Response
+    {
+        $tenantId = $this->tenantId();
+
+        $accounts = DB::table('chart_of_accounts')
+            ->where('tenant_id', $tenantId)
+            ->where('is_active', true)
+            ->where('allow_direct_posting', true)
+            ->select(['id', 'code', 'name', 'type'])
+            ->orderBy('code')
+            ->get()
+            ->map(fn ($a) => [
+                'id' => (string) $a->id,
+                'code' => $a->code,
+                'name' => $a->name,
+                'type' => $a->type,
+            ])
+            ->values();
+
+        $books = DB::table('accounting_books')
+            ->where('tenant_id', $tenantId)
+            ->where('is_active', true)
+            ->select(['id', 'name', 'code', 'base_currency'])
+            ->orderBy('name')
+            ->get();
+
+        $periods = DB::table('accounting_periods')
+            ->where('tenant_id', $tenantId)
+            ->where('status', 'open')
+            ->select(['id', 'name', 'start_date', 'end_date'])
+            ->orderByDesc('start_date')
+            ->get()
+            ->map(fn ($p) => [
+                'id' => (string) $p->id,
+                'name' => $p->name,
+                'start_date' => $p->start_date,
+                'end_date' => $p->end_date,
+            ])
+            ->values();
+
+        $suggestedReference = 'JE-' . now()->format('Ymd') . '-'
+            . str_pad((string) ((int) DB::table('journal_entries')->where('reference', 'like', 'JE-' . now()->format('Ymd') . '-%')->count() + 1), 4, '0', STR_PAD_LEFT);
+
+        return Inertia::render('Accounting/JournalEntryCreate', [
+            'accounts' => $accounts,
+            'books' => $books,
+            'periods' => $periods,
+            'suggested_reference' => $suggestedReference,
+            'default_date' => now()->format('Y-m-d'),
+        ]);
+    }
+
+    public function storeJournalEntry(Request $request)
+    {
+        $tenantId = $this->tenantId();
+
+        $validated = $request->validate([
+            'reference' => ['nullable', 'string', 'max:100'],
+            'document_date' => ['required', 'date'],
+            'posting_date' => ['nullable', 'date'],
+            'description' => ['nullable', 'string', 'max:2000'],
+            'currency' => ['nullable', 'string', 'size:3'],
+            'accounting_book_id' => ['nullable', 'integer'],
+            'status' => ['nullable', 'in:draft,posted'],
+            'lines' => ['required', 'array', 'min:2'],
+            'lines.*.account_id' => ['nullable'],
+            'lines.*.debit_amount' => ['nullable', 'numeric', 'min:0'],
+            'lines.*.credit_amount' => ['nullable', 'numeric', 'min:0'],
+            'lines.*.description' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $lines = collect($validated['lines'])
+            ->map(function ($line) {
+                return [
+                    'account_id' => (int) ($line['account_id'] ?? 0),
+                    'debit' => round((float) ($line['debit_amount'] ?? 0), 4),
+                    'credit' => round((float) ($line['credit_amount'] ?? 0), 4),
+                    'description' => trim((string) ($line['description'] ?? '')) ?: null,
+                ];
+            })
+            ->filter(fn ($line) => $line['debit'] > 0 || $line['credit'] > 0)
+            ->values();
+
+        if ($lines->count() < 2) {
+            return back()->withErrors(['lines' => 'Enter at least two lines with a debit or credit amount.'])->withInput();
+        }
+
+        foreach ($lines as $index => $line) {
+            if ($line['debit'] > 0 && $line['credit'] > 0) {
+                return back()->withErrors(['lines' => 'Line ' . ($index + 1) . ' cannot have both a debit and a credit amount.'])->withInput();
+            }
+            if ($line['account_id'] <= 0) {
+                return back()->withErrors(['lines' => 'Line ' . ($index + 1) . ' must have an account selected.'])->withInput();
+            }
+        }
+
+        $totalDebit = round((float) $lines->sum('debit'), 4);
+        $totalCredit = round((float) $lines->sum('credit'), 4);
+
+        if ($totalDebit <= 0) {
+            return back()->withErrors(['lines' => 'The journal entry must have a debit total greater than zero.'])->withInput();
+        }
+        if (abs($totalDebit - $totalCredit) > 0.0001) {
+            return back()->withErrors(['lines' => 'The journal entry is not balanced: total debit ' . number_format($totalDebit, 2) . ' does not equal total credit ' . number_format($totalCredit, 2) . '.'])->withInput();
+        }
+
+        $accountIds = $lines->pluck('account_id')->unique()->values();
+        $validAccountIds = DB::table('chart_of_accounts')
+            ->where('tenant_id', $tenantId)
+            ->where('is_active', true)
+            ->where('allow_direct_posting', true)
+            ->whereIn('id', $accountIds)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        if (count($validAccountIds) !== $accountIds->count()) {
+            return back()->withErrors(['lines' => 'One or more selected accounts are inactive or do not allow direct posting.'])->withInput();
+        }
+
+        $bookId = (int) ($validated['accounting_book_id'] ?? 0);
+        $book = null;
+        if ($bookId > 0) {
+            $book = DB::table('accounting_books')->where('tenant_id', $tenantId)->where('id', $bookId)->first();
+        }
+        if (!$book) {
+            $book = DB::table('accounting_books')->where('tenant_id', $tenantId)->where('is_active', true)->orderBy('id')->first();
+        }
+        if (!$book) {
+            $newBookId = DB::table('accounting_books')->insertGetId([
+                'tenant_id' => $tenantId,
+                'name' => 'Default Accounting Book',
+                'code' => 'DEF-' . $tenantId,
+                'base_currency' => 'PKR',
+                'is_active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $book = DB::table('accounting_books')->where('id', $newBookId)->first();
+        }
+
+        $currency = strtoupper((string) ($validated['currency'] ?? $book->base_currency ?? 'PKR'));
+        if (strlen($currency) !== 3) $currency = 'PKR';
+
+        $documentDate = Carbon::parse($validated['document_date']);
+        $postingDate = !empty($validated['posting_date']) ? Carbon::parse($validated['posting_date']) : $documentDate;
+
+        $periodId = null;
+        try {
+            $period = DB::table('accounting_periods')
+                ->where('tenant_id', $tenantId)
+                ->whereDate('start_date', '<=', $postingDate->toDateString())
+                ->whereDate('end_date', '>=', $postingDate->toDateString())
+                ->orderByDesc('start_date')
+                ->first();
+            if ($period) {
+                if ($period->status === 'closed' && ($validated['status'] ?? 'posted') === 'posted') {
+                    return back()->withErrors(['posting_date' => 'The accounting period covering this date is closed. Reopen it or choose another date.'])->withInput();
+                }
+                $periodId = $period->id;
+            }
+        } catch (\Throwable $e) {
+            $periodId = null;
+        }
+
+        $status = in_array(($validated['status'] ?? 'posted'), ['draft', 'posted'], true) ? $validated['status'] : 'posted';
+
+        $reference = trim((string) ($validated['reference'] ?? ''));
+        if ($reference === '') {
+            $prefix = 'JE-' . $documentDate->format('Ymd') . '-';
+            $seq = (int) DB::table('journal_entries')->where('reference', 'like', $prefix . '%')->count() + 1;
+            do {
+                $reference = $prefix . str_pad((string) $seq, 4, '0', STR_PAD_LEFT);
+                $seq++;
+            } while (DB::table('journal_entries')->where('reference', $reference)->exists());
+        } elseif (DB::table('journal_entries')->where('reference', $reference)->exists()) {
+            return back()->withErrors(['reference' => 'This reference is already used by another journal entry.'])->withInput();
+        }
+
+        $userId = $request->user()?->id;
+        if (!$userId) {
+            $userId = (int) DB::table('users')->orderBy('id')->value('id');
+        }
+        if (!$userId) {
+            return back()->withErrors(['lines' => 'No user is available to record the journal entry.'])->withInput();
+        }
+
+        try {
+            $entryId = DB::transaction(function () use ($tenantId, $book, $currency, $documentDate, $postingDate, $periodId, $status, $reference, $validated, $userId, $lines) {
+                $entryId = DB::table('journal_entries')->insertGetId([
+                    'tenant_id' => $tenantId,
+                    'accounting_book_id' => $book->id,
+                    'fiscal_period_id' => $periodId,
+                    'document_date' => $documentDate->toDateTimeString(),
+                    'posting_date' => $postingDate->toDateTimeString(),
+                    'currency' => $currency,
+                    'exchange_rate_to_base' => 1,
+                    'reference' => $reference,
+                    'description' => $validated['description'] ?? null,
+                    'status' => $status,
+                    'created_by' => $userId,
+                    'posted_at' => $status === 'posted' ? now() : null,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                $now = now();
+                $rows = $lines->map(fn ($line) => [
+                    'entry_id' => $entryId,
+                    'tenant_id' => $tenantId,
+                    'account_id' => $line['account_id'],
+                    'debit_amount' => $line['debit'],
+                    'credit_amount' => $line['credit'],
+                    'debit_amount_base' => $line['debit'],
+                    'credit_amount_base' => $line['credit'],
+                    'currency' => $currency,
+                    'exchange_rate' => 1,
+                    'description' => $line['description'],
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ])->all();
+
+                DB::table('journal_lines')->insert($rows);
+
+                return $entryId;
+            });
+        } catch (\Throwable $e) {
+            return back()->withErrors(['lines' => 'Unable to save the journal entry: ' . $e->getMessage()])->withInput();
+        }
+
+        return redirect()->route('accounting')
+            ->with('success', 'Journal entry ' . $reference . ' ' . ($status === 'posted' ? 'posted' : 'saved as draft') . ' successfully.');
+    }
+
+    public function editJournalEntryPage(string $id): Response
+    {
+        $tenantId = $this->tenantId();
+
+        $entry = DB::table('journal_entries')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$entry, 404);
+        if ($entry->status !== 'draft') {
+            return redirect()->route('accounting.journal-entries.show', ['id' => $id])
+                ->withErrors(['entry' => 'Only draft entries can be edited. Posted entries must be reversed instead.']);
+        }
+
+        $accounts = DB::table('chart_of_accounts')
+            ->where('tenant_id', $tenantId)
+            ->where('is_active', true)
+            ->where('allow_direct_posting', true)
+            ->select(['id', 'code', 'name', 'type'])
+            ->orderBy('code')
+            ->get()
+            ->map(fn ($a) => ['id' => (string) $a->id, 'code' => $a->code, 'name' => $a->name, 'type' => $a->type])
+            ->values();
+
+        $books = DB::table('accounting_books')
+            ->where('tenant_id', $tenantId)
+            ->where('is_active', true)
+            ->select(['id', 'name', 'code', 'base_currency'])
+            ->orderBy('name')
+            ->get()
+            ->map(fn ($b) => ['id' => (string) $b->id, 'name' => $b->name, 'code' => $b->code, 'base_currency' => $b->base_currency])
+            ->values();
+
+        $periods = DB::table('accounting_periods')
+            ->where('tenant_id', $tenantId)
+            ->where('status', 'open')
+            ->select(['id', 'name', 'start_date', 'end_date'])
+            ->orderByDesc('start_date')
+            ->get()
+            ->map(fn ($p) => [
+                'id' => (string) $p->id,
+                'name' => $p->name,
+                'start_date' => $p->start_date,
+                'end_date' => $p->end_date,
+            ])
+            ->values();
+
+        $lines = DB::table('journal_lines as jl')
+            ->join('chart_of_accounts as coa', 'coa.id', '=', 'jl.account_id')
+            ->where('jl.tenant_id', $tenantId)
+            ->where('jl.entry_id', $id)
+            ->select([
+                'jl.account_id', 'coa.code as account_code', 'coa.name as account_name',
+                'jl.debit_amount_base', 'jl.credit_amount_base', 'jl.description',
+            ])
+            ->orderBy('jl.id')
+            ->get()
+            ->map(fn ($l) => [
+                'account_id' => (string) $l->account_id,
+                'account_name' => $l->account_code . ' — ' . $l->account_name,
+                'debit_amount' => (float) $l->debit_amount_base > 0 ? (string) (float) $l->debit_amount_base : '',
+                'credit_amount' => (float) $l->credit_amount_base > 0 ? (string) (float) $l->credit_amount_base : '',
+                'description' => $l->description,
+            ])
+            ->values();
+
+        return Inertia::render('Accounting/JournalEntryCreate', [
+            'accounts' => $accounts,
+            'books' => $books,
+            'periods' => $periods,
+            'suggested_reference' => $entry->reference,
+            'default_date' => Carbon::parse($entry->document_date)->format('Y-m-d'),
+            'entry' => [
+                'id' => $entry->id,
+                'reference' => $entry->reference,
+                'document_date' => Carbon::parse($entry->document_date)->format('Y-m-d'),
+                'posting_date' => Carbon::parse($entry->posting_date)->format('Y-m-d'),
+                'accounting_book_id' => (string) $entry->accounting_book_id,
+                'currency' => $entry->currency,
+                'status' => $entry->status,
+                'description' => $entry->description,
+                'lines' => $lines,
+            ],
+        ]);
+    }
+
+    public function updateJournalEntry(Request $request, string $id)
+    {
+        $tenantId = $this->tenantId();
+        $entry = DB::table('journal_entries')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$entry, 404);
+
+        if ($entry->status !== 'draft') {
+            return back()->withErrors(['entry' => 'Only draft entries can be edited. Reverse posted entries instead.']);
+        }
+
+        $validated = $request->validate([
+            'reference' => ['nullable', 'string', 'max:100'],
+            'document_date' => ['required', 'date'],
+            'posting_date' => ['nullable', 'date'],
+            'description' => ['nullable', 'string', 'max:2000'],
+            'currency' => ['nullable', 'string', 'size:3'],
+            'accounting_book_id' => ['nullable', 'integer'],
+            'status' => ['nullable', 'in:draft,posted'],
+            'lines' => ['required', 'array', 'min:2'],
+            'lines.*.account_id' => ['nullable'],
+            'lines.*.debit_amount' => ['nullable', 'numeric', 'min:0'],
+            'lines.*.credit_amount' => ['nullable', 'numeric', 'min:0'],
+            'lines.*.description' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $lines = collect($validated['lines'])
+            ->map(fn ($line) => [
+                'account_id' => (int) ($line['account_id'] ?? 0),
+                'debit' => round((float) ($line['debit_amount'] ?? 0), 4),
+                'credit' => round((float) ($line['credit_amount'] ?? 0), 4),
+                'description' => trim((string) ($line['description'] ?? '')) ?: null,
+            ])
+            ->filter(fn ($line) => $line['debit'] > 0 || $line['credit'] > 0)
+            ->values();
+
+        if ($lines->count() < 2) {
+            return back()->withErrors(['lines' => 'Enter at least two lines with a debit or credit amount.'])->withInput();
+        }
+
+        foreach ($lines as $index => $line) {
+            if ($line['debit'] > 0 && $line['credit'] > 0) {
+                return back()->withErrors(['lines' => 'Line ' . ($index + 1) . ' cannot have both a debit and a credit amount.'])->withInput();
+            }
+            if ($line['account_id'] <= 0) {
+                return back()->withErrors(['lines' => 'Line ' . ($index + 1) . ' must have an account selected.'])->withInput();
+            }
+        }
+
+        $totalDebit = round((float) $lines->sum('debit'), 4);
+        $totalCredit = round((float) $lines->sum('credit'), 4);
+        if ($totalDebit <= 0) {
+            return back()->withErrors(['lines' => 'The journal entry must have a debit total greater than zero.'])->withInput();
+        }
+        if (abs($totalDebit - $totalCredit) > 0.0001) {
+            return back()->withErrors(['lines' => 'The journal entry is not balanced: total debit ' . number_format($totalDebit, 2) . ' does not equal total credit ' . number_format($totalCredit, 2) . '.'])->withInput();
+        }
+
+        $accountIds = $lines->pluck('account_id')->unique()->values();
+        $validAccountCount = DB::table('chart_of_accounts')
+            ->where('tenant_id', $tenantId)
+            ->where('is_active', true)
+            ->where('allow_direct_posting', true)
+            ->whereIn('id', $accountIds)
+            ->count();
+        if ($validAccountCount !== $accountIds->count()) {
+            return back()->withErrors(['lines' => 'One or more selected accounts are inactive or do not allow direct posting.'])->withInput();
+        }
+
+        $documentDate = Carbon::parse($validated['document_date']);
+        $postingDate = !empty($validated['posting_date']) ? Carbon::parse($validated['posting_date']) : $documentDate;
+        $status = in_array(($validated['status'] ?? 'draft'), ['draft', 'posted'], true) ? ($validated['status'] ?? 'draft') : 'draft';
+
+        $reference = trim((string) ($validated['reference'] ?? ''));
+        if ($reference === '') $reference = $entry->reference;
+        $duplicate = DB::table('journal_entries')->where('reference', $reference)->where('id', '!=', $id)->exists();
+        if ($duplicate) {
+            return back()->withErrors(['reference' => 'This reference is already used by another journal entry.'])->withInput();
+        }
+
+        $periodId = null;
+        try {
+            $period = DB::table('accounting_periods')
+                ->where('tenant_id', $tenantId)
+                ->whereDate('start_date', '<=', $postingDate->toDateString())
+                ->whereDate('end_date', '>=', $postingDate->toDateString())
+                ->orderByDesc('start_date')
+                ->first();
+            if ($period) {
+                if ($period->status === 'closed' && $status === 'posted') {
+                    return back()->withErrors(['posting_date' => 'The accounting period covering this date is closed. Reopen it or choose another date.'])->withInput();
+                }
+                $periodId = $period->id;
+            }
+        } catch (\Throwable $e) {
+            $periodId = null;
+        }
+
+        $bookId = (int) ($validated['accounting_book_id'] ?? 0) ?: (int) $entry->accounting_book_id;
+        $book = DB::table('accounting_books')->where('tenant_id', $tenantId)->where('id', $bookId)->first();
+        if (!$book) $book = DB::table('accounting_books')->where('tenant_id', $tenantId)->orderBy('id')->first();
+
+        $currency = strtoupper((string) ($validated['currency'] ?? $book->base_currency ?? 'PKR'));
+        if (strlen($currency) !== 3) $currency = 'PKR';
+
+        try {
+            DB::transaction(function () use ($tenantId, $id, $entry, $validated, $documentDate, $postingDate, $periodId, $status, $reference, $currency, $book, $lines) {
+                DB::table('journal_entries')->where('id', $id)->where('tenant_id', $tenantId)->update([
+                    'accounting_book_id' => $book->id,
+                    'fiscal_period_id' => $periodId,
+                    'document_date' => $documentDate->toDateTimeString(),
+                    'posting_date' => $postingDate->toDateTimeString(),
+                    'currency' => $currency,
+                    'reference' => $reference,
+                    'description' => $validated['description'] ?? null,
+                    'status' => $status,
+                    'posted_at' => $status === 'posted' ? ($entry->posted_at ?: now()) : null,
+                    'updated_at' => now(),
+                ]);
+
+                DB::table('journal_lines')->where('entry_id', $id)->where('tenant_id', $tenantId)->delete();
+
+                $now = now();
+                $rows = $lines->map(fn ($line) => [
+                    'entry_id' => $id,
+                    'tenant_id' => $tenantId,
+                    'account_id' => $line['account_id'],
+                    'debit_amount' => $line['debit'],
+                    'credit_amount' => $line['credit'],
+                    'debit_amount_base' => $line['debit'],
+                    'credit_amount_base' => $line['credit'],
+                    'currency' => $currency,
+                    'exchange_rate' => 1,
+                    'description' => $line['description'],
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ])->all();
+                DB::table('journal_lines')->insert($rows);
+            });
+        } catch (\Throwable $e) {
+            return back()->withErrors(['lines' => 'Unable to update the journal entry: ' . $e->getMessage()])->withInput();
+        }
+
+        return redirect()->route('accounting.journal-entries.show', ['id' => $id])
+            ->with('success', 'Journal entry ' . $reference . ' updated successfully.');
+    }
+
+    public function journalEntryShow(string $id): Response
+    {
+        $tenantId = $this->tenantId();
+
+        $entry = DB::table('journal_entries as je')
+            ->leftJoin('accounting_books as ab', 'ab.id', '=', 'je.accounting_book_id')
+            ->leftJoin('accounting_periods as ap', 'ap.id', '=', 'je.fiscal_period_id')
+            ->leftJoin('users as u', 'u.id', '=', 'je.created_by')
+            ->leftJoin('users as au', 'au.id', '=', 'je.approved_by')
+            ->leftJoin('journal_entries as rev', 'rev.id', '=', 'je.reversal_reference_id')
+            ->where('je.tenant_id', $tenantId)
+            ->where('je.id', $id)
+            ->select([
+                'je.id', 'je.reference', 'je.document_date', 'je.posting_date', 'je.status',
+                'je.currency', 'je.exchange_rate_to_base', 'je.description', 'je.posted_at',
+                'je.created_at', 'je.updated_at', 'je.reversal_reference_id',
+                'ab.name as book_name', 'ab.code as book_code',
+                'ap.name as period_name',
+                'u.name as created_by_name', 'au.name as approved_by_name',
+                'rev.reference as reversal_reference',
+            ])
+            ->first();
+
+        abort_if(!$entry, 404);
+
+        $lines = DB::table('journal_lines as jl')
+            ->join('chart_of_accounts as coa', 'coa.id', '=', 'jl.account_id')
+            ->where('jl.tenant_id', $tenantId)
+            ->where('jl.entry_id', $id)
+            ->select([
+                'jl.id', 'jl.account_id', 'coa.code as account_code', 'coa.name as account_name', 'coa.type as account_type',
+                'jl.description', 'jl.debit_amount', 'jl.credit_amount', 'jl.debit_amount_base', 'jl.credit_amount_base',
+            ])
+            ->orderBy('jl.id')
+            ->get()
+            ->map(fn ($l) => [
+                'id' => $l->id,
+                'account_id' => $l->account_id,
+                'account_code' => $l->account_code,
+                'account_name' => $l->account_name,
+                'account_type' => $l->account_type,
+                'description' => $l->description,
+                'debit' => (float) $l->debit_amount_base,
+                'credit' => (float) $l->credit_amount_base,
+            ])
+            ->values();
+
+        $reverseEntryId = null;
+        try {
+            $reverseEntryId = DB::table('journal_entries')
+                ->where('tenant_id', $tenantId)
+                ->where('reversal_reference_id', $id)
+                ->value('id');
+        } catch (\Throwable $e) {
+            $reverseEntryId = null;
+        }
+
+        return Inertia::render('Accounting/JournalEntryShow', [
+            'entry' => [
+                'id' => $entry->id,
+                'reference' => $entry->reference,
+                'document_date' => $entry->document_date ? Carbon::parse($entry->document_date)->format('Y-m-d') : null,
+                'posting_date' => $entry->posting_date ? Carbon::parse($entry->posting_date)->format('Y-m-d') : null,
+                'status' => $entry->status,
+                'currency' => $entry->currency,
+                'exchange_rate' => (float) $entry->exchange_rate_to_base,
+                'description' => $entry->description,
+                'book_name' => $entry->book_name,
+                'book_code' => $entry->book_code,
+                'period_name' => $entry->period_name,
+                'created_by_name' => $entry->created_by_name,
+                'approved_by_name' => $entry->approved_by_name,
+                'posted_at' => $entry->posted_at ? Carbon::parse($entry->posted_at)->format('d M Y, H:i') : null,
+                'created_at' => $entry->created_at ? Carbon::parse($entry->created_at)->format('d M Y, H:i') : null,
+                'reversal_reference' => $entry->reversal_reference,
+                'reversal_entry_id' => $reverseEntryId,
+            ],
+            'lines' => $lines,
+            'totals' => [
+                'debit' => (float) $lines->sum('debit'),
+                'credit' => (float) $lines->sum('credit'),
+                'line_count' => $lines->count(),
+            ],
+        ]);
+    }
+
+    public function postJournalEntry(Request $request, string $id)
+    {
+        $tenantId = $this->tenantId();
+        $entry = DB::table('journal_entries')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$entry, 404);
+
+        if (!in_array($entry->status, ['draft', 'submitted'], true)) {
+            return back()->withErrors(['entry' => 'Only draft or submitted entries can be posted.']);
+        }
+
+        $debit = (float) DB::table('journal_lines')->where('entry_id', $id)->sum('debit_amount_base');
+        $credit = (float) DB::table('journal_lines')->where('entry_id', $id)->sum('credit_amount_base');
+        if (abs($debit - $credit) > 0.0001 || $debit <= 0) {
+            return back()->withErrors(['entry' => 'This entry is not balanced and cannot be posted.']);
+        }
+
+        $userId = $request->user()?->id ?: (int) DB::table('users')->orderBy('id')->value('id');
+
+        if ($entry->fiscal_period_id) {
+            $periodStatus = DB::table('accounting_periods')->where('id', $entry->fiscal_period_id)->value('status');
+            if ($periodStatus === 'closed') {
+                return back()->withErrors(['entry' => 'The accounting period for this entry is closed. Reopen it before posting.']);
+            }
+        }
+
+        DB::table('journal_entries')->where('id', $id)->where('tenant_id', $tenantId)->update([
+            'status' => 'posted',
+            'posted_at' => now(),
+            'approved_by' => $userId ?: null,
+            'updated_at' => now(),
+        ]);
+
+        return back()->with('success', 'Journal entry ' . $entry->reference . ' posted successfully.');
+    }
+
+    public function reverseJournalEntry(Request $request, string $id)
+    {
+        $tenantId = $this->tenantId();
+        $entry = DB::table('journal_entries')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$entry, 404);
+
+        if ($entry->status !== 'posted') {
+            return back()->withErrors(['entry' => 'Only posted entries can be reversed.']);
+        }
+
+        $alreadyReversed = DB::table('journal_entries')
+            ->where('tenant_id', $tenantId)
+            ->where('reversal_reference_id', $id)
+            ->exists();
+        if ($alreadyReversed) {
+            return back()->withErrors(['entry' => 'This entry has already been reversed.']);
+        }
+
+        $lines = DB::table('journal_lines')->where('tenant_id', $tenantId)->where('entry_id', $id)->orderBy('id')->get();
+        if ($lines->isEmpty()) {
+            return back()->withErrors(['entry' => 'This entry has no lines to reverse.']);
+        }
+
+        $userId = $request->user()?->id ?: (int) DB::table('users')->orderBy('id')->value('id');
+        if (!$userId) {
+            return back()->withErrors(['entry' => 'No user is available to record the reversal.']);
+        }
+
+        $reference = 'REV-' . $entry->reference;
+        $suffix = 1;
+        while (DB::table('journal_entries')->where('reference', $reference)->exists()) {
+            $suffix++;
+            $reference = 'REV-' . $entry->reference . '-' . $suffix;
+        }
+
+        $reverseId = DB::transaction(function () use ($tenantId, $entry, $reference, $lines, $userId) {
+            $reversalPeriodId = null;
+            try {
+                $reversalPeriodId = DB::table('accounting_periods')
+                    ->where('tenant_id', $tenantId)
+                    ->where('status', 'open')
+                    ->whereDate('start_date', '<=', now()->toDateString())
+                    ->whereDate('end_date', '>=', now()->toDateString())
+                    ->orderByDesc('start_date')
+                    ->value('id');
+            } catch (\Throwable $e) {
+                $reversalPeriodId = null;
+            }
+
+            $reverseId = DB::table('journal_entries')->insertGetId([
+                'tenant_id' => $tenantId,
+                'accounting_book_id' => $entry->accounting_book_id,
+                'fiscal_period_id' => $reversalPeriodId ?: $entry->fiscal_period_id,
+                'document_date' => now()->toDateTimeString(),
+                'posting_date' => now()->toDateTimeString(),
+                'currency' => $entry->currency,
+                'exchange_rate_to_base' => $entry->exchange_rate_to_base,
+                'reference' => $reference,
+                'description' => 'Reversal of ' . $entry->reference . ($entry->description ? ' — ' . $entry->description : ''),
+                'status' => 'posted',
+                'reversal_reference_id' => $entry->id,
+                'created_by' => $userId,
+                'posted_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $now = now();
+            $rows = $lines->map(fn ($l) => [
+                'entry_id' => $reverseId,
+                'tenant_id' => $tenantId,
+                'account_id' => $l->account_id,
+                'debit_amount' => $l->credit_amount,
+                'credit_amount' => $l->debit_amount,
+                'debit_amount_base' => $l->credit_amount_base,
+                'credit_amount_base' => $l->debit_amount_base,
+                'currency' => $l->currency,
+                'exchange_rate' => $l->exchange_rate,
+                'description' => $l->description,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ])->all();
+            DB::table('journal_lines')->insert($rows);
+
+            DB::table('journal_entries')->where('id', $entry->id)->update([
+                'status' => 'reversed',
+                'updated_at' => now(),
+            ]);
+
+            return $reverseId;
+        });
+
+        return redirect()->route('accounting.journal-entries.show', ['id' => $reverseId])
+            ->with('success', 'Reversal entry ' . $reference . ' posted successfully.');
+    }
+
+    public function deleteJournalEntry(string $id)
+    {
+        $tenantId = $this->tenantId();
+        $entry = DB::table('journal_entries')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$entry, 404);
+
+        if ($entry->status !== 'draft') {
+            return back()->withErrors(['entry' => 'Only draft entries can be deleted. Reverse posted entries instead.']);
+        }
+
+        $hasReversal = DB::table('journal_entries')
+            ->where('tenant_id', $tenantId)
+            ->where('reversal_reference_id', $id)
+            ->exists();
+        if ($hasReversal) {
+            return back()->withErrors(['entry' => 'This draft has a linked reversal and cannot be deleted.']);
+        }
+
+        DB::transaction(function () use ($id, $tenantId) {
+            DB::table('journal_lines')->where('entry_id', $id)->where('tenant_id', $tenantId)->delete();
+            DB::table('journal_entries')->where('id', $id)->where('tenant_id', $tenantId)->delete();
+        });
+
+        return redirect()->route('accounting')->with('success', 'Draft journal entry deleted.');
+    }
+
+    public function exportJournalEntries(Request $request)
+    {
+        $tenantId = $this->tenantId();
+        $status = (string) $request->query('status', '');
+        $from = $request->query('from');
+        $to = $request->query('to');
+
+        $query = DB::table('journal_entries as je')
+            ->leftJoin('accounting_books as ab', 'ab.id', '=', 'je.accounting_book_id')
+            ->where('je.tenant_id', $tenantId)
+            ->select([
+                'je.reference', 'je.document_date', 'je.posting_date', 'je.status',
+                'je.description', 'ab.name as book_name',
+            ]);
+        if (in_array($status, ['draft', 'submitted', 'posted', 'reversed'], true)) $query->where('je.status', $status);
+        if ($from) $query->whereDate('je.document_date', '>=', $from);
+        if ($to) $query->whereDate('je.document_date', '<=', $to);
+
+        $q = trim((string) $request->query('q', ''));
+        if ($q !== '') {
+            $query->where(function ($sub) use ($q) {
+                $sub->where('je.reference', 'ilike', '%' . $q . '%')
+                    ->orWhere('je.description', 'ilike', '%' . $q . '%');
+            });
+        }
+
+        $rows = $query->orderByDesc('je.document_date')->orderByDesc('je.id')->limit(20000)->get();
+
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['Reference', 'Document Date', 'Posting Date', 'Status', 'Book', 'Description']);
+            foreach ($rows as $r) {
+                fputcsv($out, [
+                    $r->reference,
+                    $r->document_date ? Carbon::parse($r->document_date)->format('Y-m-d') : '',
+                    $r->posting_date ? Carbon::parse($r->posting_date)->format('Y-m-d') : '',
+                    $r->status,
+                    $r->book_name,
+                    $r->description,
+                ]);
+            }
+            fclose($out);
+        }, 'journal_entries_' . now()->format('Ymd_His') . '.csv', ['Content-Type' => 'text/csv']);
+    }
+
+    // ============ Accounting — Fiscal Periods ============
+
+    public function accountingPeriods(Request $request): Response
+    {
+        $tenantId = $this->tenantId();
+
+        $periods = DB::table('accounting_periods as ap')
+            ->leftJoin('financial_years as fy', 'fy.id', '=', 'ap.financial_year_id')
+            ->where('ap.tenant_id', $tenantId)
+            ->select([
+                'ap.id', 'ap.name', 'ap.start_date', 'ap.end_date', 'ap.status',
+                'ap.financial_year_id', 'fy.name as financial_year_name',
+            ])
+            ->orderByDesc('ap.start_date')
+            ->get()
+            ->map(function ($p) use ($tenantId) {
+                $base = DB::table('journal_entries')
+                    ->where('tenant_id', $tenantId)
+                    ->whereDate('posting_date', '>=', $p->start_date)
+                    ->whereDate('posting_date', '<=', $p->end_date);
+
+                $entryCount = (clone $base)->count();
+                $draftCount = (clone $base)->whereIn('status', ['draft', 'submitted'])->count();
+                $postedCount = (clone $base)->where('status', 'posted')->count();
+
+                $totals = DB::table('journal_lines as jl')
+                    ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
+                    ->where('je.tenant_id', $tenantId)
+                    ->where('je.status', 'posted')
+                    ->whereDate('je.posting_date', '>=', $p->start_date)
+                    ->whereDate('je.posting_date', '<=', $p->end_date)
+                    ->selectRaw('COALESCE(SUM(jl.debit_amount_base), 0) as debit')
+                    ->selectRaw('COALESCE(SUM(jl.credit_amount_base), 0) as credit')
+                    ->first();
+
+                return [
+                    'id' => $p->id,
+                    'name' => $p->name,
+                    'financial_year_name' => $p->financial_year_name,
+                    'start_date' => $p->start_date ? Carbon::parse($p->start_date)->format('Y-m-d') : null,
+                    'end_date' => $p->end_date ? Carbon::parse($p->end_date)->format('Y-m-d') : null,
+                    'status' => $p->status,
+                    'entry_count' => $entryCount,
+                    'draft_count' => $draftCount,
+                    'posted_count' => $postedCount,
+                    'debit_total' => (float) ($totals->debit ?? 0),
+                    'credit_total' => (float) ($totals->credit ?? 0),
+                ];
+            })
+            ->values();
+
+        $years = DB::table('financial_years')
+            ->where('tenant_id', $tenantId)
+            ->select(['id', 'name', 'start_date', 'end_date', 'is_closed'])
+            ->orderByDesc('start_date')
+            ->get();
+
+        return Inertia::render('Accounting/AccountingPeriods', [
+            'periods' => $periods,
+            'financial_years' => $years,
+            'summary' => [
+                'total' => $periods->count(),
+                'open' => $periods->where('status', 'open')->count(),
+                'closed' => $periods->where('status', 'closed')->count(),
+                'draft_entries' => $periods->sum('draft_count'),
+            ],
+        ]);
+    }
+
+    public function storeAccountingPeriod(Request $request)
+    {
+        $tenantId = $this->tenantId();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'financial_year_id' => ['nullable', 'integer'],
+            'start_date' => ['required', 'date'],
+            'end_date' => ['required', 'date', 'after_or_equal:start_date'],
+        ]);
+
+        $start = Carbon::parse($validated['start_date'])->startOfDay();
+        $end = Carbon::parse($validated['end_date'])->startOfDay();
+
+        $overlap = DB::table('accounting_periods')
+            ->where('tenant_id', $tenantId)
+            ->whereDate('start_date', '<=', $end->toDateString())
+            ->whereDate('end_date', '>=', $start->toDateString())
+            ->exists();
+        if ($overlap) {
+            return back()->withErrors(['start_date' => 'This period overlaps an existing accounting period.'])->withInput();
+        }
+
+        $yearId = (int) ($validated['financial_year_id'] ?? 0);
+        if ($yearId > 0) {
+            $year = DB::table('financial_years')->where('tenant_id', $tenantId)->where('id', $yearId)->first();
+            if (!$year) {
+                return back()->withErrors(['financial_year_id' => 'Selected financial year was not found.'])->withInput();
+            }
+        } else {
+            $year = DB::table('financial_years')
+                ->where('tenant_id', $tenantId)
+                ->whereDate('start_date', '<=', $start->toDateString())
+                ->whereDate('end_date', '>=', $end->toDateString())
+                ->orderByDesc('start_date')
+                ->first();
+            if (!$year) {
+                $yearId = DB::table('financial_years')->insertGetId([
+                    'tenant_id' => $tenantId,
+                    'name' => 'FY ' . $start->format('Y'),
+                    'start_date' => $start->copy()->startOfYear()->toDateString(),
+                    'end_date' => $start->copy()->endOfYear()->toDateString(),
+                    'is_closed' => false,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            } else {
+                $yearId = $year->id;
+            }
+        }
+
+        DB::table('accounting_periods')->insert([
+            'tenant_id' => $tenantId,
+            'financial_year_id' => $yearId,
+            'name' => $validated['name'],
+            'start_date' => $start->toDateString(),
+            'end_date' => $end->toDateString(),
+            'status' => 'open',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return redirect()->route('accounting.periods')->with('success', 'Accounting period created successfully.');
+    }
+
+    public function toggleAccountingPeriod(Request $request, string $id)
+    {
+        $tenantId = $this->tenantId();
+        $period = DB::table('accounting_periods')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$period, 404);
+
+        if ($period->status === 'open') {
+            $unposted = DB::table('journal_entries')
+                ->where('tenant_id', $tenantId)
+                ->whereIn('status', ['draft', 'submitted'])
+                ->whereDate('posting_date', '>=', $period->start_date)
+                ->whereDate('posting_date', '<=', $period->end_date)
+                ->count();
+
+            if ($unposted > 0) {
+                return back()->withErrors(['period' => "This period has {$unposted} unposted journal entr" . ($unposted === 1 ? 'y' : 'ies') . '. Post or delete them before closing the period.']);
+            }
+        }
+
+        DB::table('accounting_periods')->where('id', $id)->where('tenant_id', $tenantId)->update([
+            'status' => $period->status === 'open' ? 'closed' : 'open',
+            'updated_at' => now(),
+        ]);
+
+        return back()->with('success', 'Accounting period ' . ($period->status === 'open' ? 'closed' : 'reopened') . ' successfully.');
+    }
+
+    public function createAccountPage(Request $request): Response
+    {
+        $tenantId = $this->tenantId();
+
+        $parents = DB::table('chart_of_accounts')
+            ->where('tenant_id', $tenantId)
+            ->select(['id', 'code', 'name', 'type'])
+            ->orderBy('code')
+            ->get();
+
+        $groups = DB::table('account_groups')
+            ->where('tenant_id', $tenantId)
+            ->select(['id', 'code', 'name', 'type'])
+            ->orderBy('code')
+            ->get();
+
+        $prefill = null;
+        $parentId = $request->query('parent_id');
+        if ($parentId) {
+            $parent = DB::table('chart_of_accounts')
+                ->where('tenant_id', $tenantId)
+                ->where('id', $parentId)
+                ->first();
+            if ($parent) {
+                $prefill = [
+                    'code' => '',
+                    'name' => '',
+                    'type' => $parent->type ?? 'asset',
+                    'account_group_id' => $parent->account_group_id,
+                    'parent_id' => $parent->id,
+                    'allow_direct_posting' => true,
+                    'is_cash_account' => false,
+                    'is_bank_account' => false,
+                    'is_active' => true,
+                ];
+            }
+        }
+
+        return Inertia::render('Accounting/AccountCreate', [
+            'parents' => $parents,
+            'groups' => $groups,
+            'prefill' => $prefill,
+        ]);
+    }
+
+    // ============ Accounting — Chart of Accounts CSV Import ============
+
+    public function importAccountsPage(): Response
+    {
+        $tenantId = $this->tenantId();
+
+        $groups = DB::table('account_groups')
+            ->where('tenant_id', $tenantId)
+            ->select(['id', 'code', 'name'])
+            ->orderBy('code')
+            ->get();
+
+        return Inertia::render('Accounting/AccountImport', [
+            'groups' => $groups,
+            'preview' => null,
+            'summary' => null,
+            'import_token' => null,
+        ]);
+    }
+
+    public function importAccountTemplate()
+    {
+        $rows = [
+            ['code', 'name', 'type', 'parent_code', 'group_code', 'allow_direct_posting', 'is_cash_account', 'is_bank_account', 'is_active'],
+            ['1010', 'Cash on Hand', 'asset', '', '', 'yes', 'yes', 'no', 'yes'],
+            ['1020', 'Bank — Current Account', 'asset', '', '', 'yes', 'no', 'yes', 'yes'],
+            ['4010', 'Sales Revenue', 'revenue', '', '', 'yes', 'no', 'no', 'yes'],
+            ['5010', 'Cost of Goods Sold', 'expense', '', '', 'yes', 'no', 'no', 'yes'],
+        ];
+
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+            foreach ($rows as $row) fputcsv($out, $row);
+            fclose($out);
+        }, 'chart_of_accounts_template.csv', ['Content-Type' => 'text/csv']);
+    }
+
+    private function importBool(?string $value, bool $default = false): bool
+    {
+        $v = strtolower(trim((string) $value));
+        if ($v === '') return $default;
+        return in_array($v, ['1', 'yes', 'true', 'y', 'active', 'on'], true);
+    }
+
+    public function previewAccountImport(Request $request)
+    {
+        $tenantId = $this->tenantId();
+
+        $request->validate([
+            'file' => ['required', 'file', 'max:10240'],
+        ]);
+
+        $file = $request->file('file');
+        if (!in_array(strtolower($file->getClientOriginalExtension()), ['csv', 'txt'], true)) {
+            return back()->withErrors(['file' => 'Please upload a CSV file (.csv or .txt).']);
+        }
+        $handle = fopen($file->getRealPath(), 'r');
+        if (!$handle) {
+            return back()->withErrors(['file' => 'Unable to read the uploaded file.']);
+        }
+
+        $header = null;
+        $raw = [];
+        $line = 0;
+        while (($cols = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
+            $line++;
+            if ($header === null) {
+                $header = array_map(static fn ($h) => strtolower(trim((string) $h)), $cols);
+                continue;
+            }
+            if (count(array_filter($cols, static fn ($c) => trim((string) $c) !== '')) === 0) continue;
+            $assoc = [];
+            foreach ($header as $i => $key) {
+                if ($key === '') continue;
+                $assoc[$key] = trim((string) ($cols[$i] ?? ''));
+            }
+            $raw[] = ['row' => $line, 'data' => $assoc];
+        }
+        fclose($handle);
+
+        if ($header === null || !in_array('code', $header, true) || !in_array('name', $header, true)) {
+            return back()->withErrors(['file' => 'Invalid CSV: header must include at least "code" and "name" columns.']);
+        }
+
+        $existingCodes = DB::table('chart_of_accounts')
+            ->pluck('code')
+            ->map(static fn ($c) => strtoupper(trim((string) $c)))
+            ->flip()
+            ->all();
+
+        $fileCodes = [];
+        foreach ($raw as $r) {
+            $code = strtoupper(trim((string) ($r['data']['code'] ?? '')));
+            if ($code !== '') $fileCodes[$code] = true;
+        }
+
+        $groupCodes = DB::table('account_groups')
+            ->where('tenant_id', $tenantId)
+            ->pluck('code')
+            ->map(static fn ($c) => strtoupper(trim((string) $c)))
+            ->flip()
+            ->all();
+
+        $seen = [];
+        $preview = [];
+        $validRows = [];
+        foreach ($raw as $r) {
+            $d = $r['data'];
+            $errors = [];
+
+            $code = trim((string) ($d['code'] ?? ''));
+            $name = trim((string) ($d['name'] ?? ''));
+            $type = strtolower(trim((string) ($d['type'] ?? '')));
+            $parentCode = trim((string) ($d['parent_code'] ?? ''));
+            $groupCode = trim((string) ($d['group_code'] ?? ''));
+
+            if ($code === '') $errors[] = 'Code is required.';
+            if ($name === '') $errors[] = 'Name is required.';
+            if ($type === '') $errors[] = 'Type is required.';
+            elseif (!in_array($type, ['asset', 'liability', 'equity', 'revenue', 'expense'], true)) $errors[] = 'Type must be asset, liability, equity, revenue, or expense.';
+
+            $codeKey = strtoupper($code);
+            if ($codeKey !== '') {
+                if (isset($seen[$codeKey])) $errors[] = 'Duplicate code within the CSV.';
+                $seen[$codeKey] = true;
+                if (isset($existingCodes[$codeKey])) $errors[] = 'Code already exists in the chart of accounts.';
+            }
+
+            if ($parentCode !== '') {
+                $parentKey = strtoupper($parentCode);
+                if (!isset($existingCodes[$parentKey]) && !isset($fileCodes[$parentKey])) {
+                    $errors[] = "Parent code '{$parentCode}' was not found in the CSV or existing accounts.";
+                }
+            }
+
+            if ($groupCode !== '') {
+                $groupKey = strtoupper($groupCode);
+                if (!isset($groupCodes[$groupKey])) {
+                    $errors[] = "Group code '{$groupCode}' was not found.";
+                }
+            }
+
+            $row = [
+                'row' => $r['row'],
+                'code' => $code,
+                'name' => $name,
+                'type' => $type,
+                'parent_code' => $parentCode,
+                'group_code' => $groupCode,
+                'allow_direct_posting' => $this->importBool($d['allow_direct_posting'] ?? null, true),
+                'is_cash_account' => $this->importBool($d['is_cash_account'] ?? null, false),
+                'is_bank_account' => $this->importBool($d['is_bank_account'] ?? null, false),
+                'is_active' => $this->importBool($d['is_active'] ?? null, true),
+                'valid' => count($errors) === 0,
+                'errors' => $errors,
+            ];
+
+            $preview[] = $row;
+            if ($row['valid']) $validRows[] = $row;
+        }
+
+        $token = bin2hex(random_bytes(16));
+        $request->session()->put('coa_import_' . $token, [
+            'tenant_id' => $tenantId,
+            'created_at' => time(),
+            'rows' => $validRows,
+        ]);
+
+        $summary = [
+            'total' => count($preview),
+            'valid' => count($validRows),
+            'invalid' => count($preview) - count($validRows),
+        ];
+
+        return Inertia::render('Accounting/AccountImport', [
+            'groups' => DB::table('account_groups')->where('tenant_id', $tenantId)->select(['id', 'code', 'name'])->orderBy('code')->get(),
+            'preview' => $preview,
+            'summary' => $summary,
+            'import_token' => $token,
+        ]);
+    }
+
+    public function commitAccountImport(Request $request)
+    {
+        $tenantId = $this->tenantId();
+        $token = (string) $request->input('token', '');
+
+        $payload = $token !== '' ? $request->session()->pull('coa_import_' . $token) : null;
+        if (!$payload || ($payload['tenant_id'] ?? null) !== $tenantId) {
+            return redirect()->route('accounting.chart-of-accounts.import')->withErrors(['file' => 'Import session expired or invalid. Please upload and preview the file again.']);
+        }
+        if ((time() - (int) ($payload['created_at'] ?? 0)) > 1800) {
+            return redirect()->route('accounting.chart-of-accounts.import')->withErrors(['file' => 'Import session expired. Please upload and preview the file again.']);
+        }
+
+        $rows = $payload['rows'] ?? [];
+        $inserted = 0;
+        $skipped = 0;
+
+        $pending = $rows;
+        $passes = 0;
+        while (!empty($pending) && $passes < 5) {
+            $next = [];
+            foreach ($pending as $row) {
+                $parentId = null;
+                if (!empty($row['parent_code'])) {
+                    $parentId = DB::table('chart_of_accounts')
+                        ->where('tenant_id', $tenantId)
+                        ->where('code', $row['parent_code'])
+                        ->value('id');
+                    if (!$parentId) {
+                        $next[] = $row;
+                        continue;
+                    }
+                }
+
+                if (DB::table('chart_of_accounts')->where('code', $row['code'])->exists()) {
+                    $skipped++;
+                    continue;
+                }
+
+                $groupId = null;
+                if (!empty($row['group_code'])) {
+                    $groupId = DB::table('account_groups')
+                        ->where('tenant_id', $tenantId)
+                        ->where('code', $row['group_code'])
+                        ->value('id');
+                }
+
+                try {
+                    DB::table('chart_of_accounts')->insert([
+                        'tenant_id' => $tenantId,
+                        'code' => $row['code'],
+                        'name' => $row['name'],
+                        'type' => $row['type'],
+                        'account_group_id' => $groupId,
+                        'parent_id' => $parentId,
+                        'allow_direct_posting' => (bool) ($row['allow_direct_posting'] ?? true),
+                        'is_cash_account' => (bool) ($row['is_cash_account'] ?? false),
+                        'is_bank_account' => (bool) ($row['is_bank_account'] ?? false),
+                        'is_active' => (bool) ($row['is_active'] ?? true),
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                    $inserted++;
+                } catch (\Throwable $e) {
+                    $skipped++;
+                }
+            }
+
+            if (count($next) === count($pending)) {
+                // Unresolved parents: insert with no parent rather than losing the row.
+                foreach ($next as $row) {
+                    if (DB::table('chart_of_accounts')->where('code', $row['code'])->exists()) {
+                        $skipped++;
+                        continue;
+                    }
+                    try {
+                        DB::table('chart_of_accounts')->insert([
+                            'tenant_id' => $tenantId,
+                            'code' => $row['code'],
+                            'name' => $row['name'],
+                            'type' => $row['type'],
+                            'account_group_id' => null,
+                            'parent_id' => null,
+                            'allow_direct_posting' => (bool) ($row['allow_direct_posting'] ?? true),
+                            'is_cash_account' => (bool) ($row['is_cash_account'] ?? false),
+                            'is_bank_account' => (bool) ($row['is_bank_account'] ?? false),
+                            'is_active' => (bool) ($row['is_active'] ?? true),
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                        $inserted++;
+                    } catch (\Throwable $e) {
+                        $skipped++;
+                    }
+                }
+                break;
+            }
+
+            $pending = $next;
+            $passes++;
+        }
+
+        return redirect()->route('accounting.chart-of-accounts')
+            ->with('success', "Imported {$inserted} account(s)." . ($skipped > 0 ? " Skipped {$skipped}." : ''));
+    }
+
+    // ============ Accounting — Account Groups ============
+
+    public function accountGroups(Request $request): Response
+    {
+        $tenantId = $this->tenantId();
+        $q = trim((string) $request->query('q', ''));
+        $type = $request->query('type');
+
+        $balanceSub = DB::table('chart_of_accounts as c')
+            ->join('journal_lines as jl', 'jl.account_id', '=', 'c.id')
+            ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
+            ->selectRaw('COALESCE(SUM(jl.debit_amount_base - jl.credit_amount_base), 0)')
+            ->whereColumn('c.account_group_id', 'ag.id')
+            ->where('c.tenant_id', $tenantId)
+            ->where('jl.tenant_id', $tenantId)
+            ->where('je.status', 'posted');
+
+        $query = DB::table('account_groups as ag')
+            ->where('ag.tenant_id', $tenantId)
+            ->select([
+                'ag.id', 'ag.code', 'ag.name', 'ag.type', 'ag.created_at',
+                DB::raw('(SELECT COUNT(*) FROM chart_of_accounts c WHERE c.account_group_id = ag.id AND c.tenant_id = ag.tenant_id) as accounts_count'),
+            ])
+            ->selectSub($balanceSub, 'posted_balance')
+            ->orderBy('ag.code');
+
+        if ($q !== '') {
+            $query->where(function ($n) use ($q) {
+                $n->where('ag.code', 'ilike', "%{$q}%")->orWhere('ag.name', 'ilike', "%{$q}%");
+            });
+        }
+        if ($type && $type !== 'all') $query->where('ag.type', $type);
+
+        $payload = $this->paginate($query);
+        $payload['data'] = array_map(function (array $row) {
+            $row['accounts_count'] = (int) ($row['accounts_count'] ?? 0);
+            $row['posted_balance'] = (float) ($row['posted_balance'] ?? 0);
+            return $row;
+        }, $payload['data']);
+
+        $byType = DB::table('account_groups')->where('tenant_id', $tenantId)
+            ->selectRaw('type, COUNT(*) as count')->groupBy('type')->pluck('count', 'type')->toArray();
+        $typeCounts = [];
+        foreach ($byType as $k => $v) $typeCounts[$k] = (int) $v;
+
+        return Inertia::render('Accounting/AccountGroups', [
+            'groups' => $payload,
+            'type_counts' => $typeCounts,
+            'summary' => [
+                'total' => (int) DB::table('account_groups')->where('tenant_id', $tenantId)->count(),
+            ],
+            'filters' => ['q' => $q, 'type' => $type ?? 'all'],
+        ]);
+    }
+
+    public function storeAccountGroup(Request $request)
+    {
+        $tenantId = $this->tenantId();
+        $validated = $request->validate([
+            'code' => ['required', 'string', 'max:50', \Illuminate\Validation\Rule::unique('account_groups', 'code')],
+            'name' => ['required', 'string', 'max:255'],
+            'type' => ['required', 'string', 'in:asset,liability,equity,revenue,expense'],
+        ]);
+
+        DB::table('account_groups')->insert([
+            'tenant_id' => $tenantId,
+            'code' => $validated['code'],
+            'name' => $validated['name'],
+            'type' => $validated['type'],
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return redirect()->route('accounting.account-groups')->with('success', 'Account group created successfully.');
+    }
+
+    public function updateAccountGroup(Request $request, string $id)
+    {
+        $tenantId = $this->tenantId();
+        $existing = DB::table('account_groups')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$existing, 404);
+
+        $validated = $request->validate([
+            'code' => ['required', 'string', 'max:50', \Illuminate\Validation\Rule::unique('account_groups', 'code')->ignore($id)],
+            'name' => ['required', 'string', 'max:255'],
+            'type' => ['required', 'string', 'in:asset,liability,equity,revenue,expense'],
+        ]);
+
+        DB::table('account_groups')->where('tenant_id', $tenantId)->where('id', $id)->update([
+            'code' => $validated['code'],
+            'name' => $validated['name'],
+            'type' => $validated['type'],
+            'updated_at' => now(),
+        ]);
+
+        return back()->with('success', 'Account group updated successfully.');
+    }
+
+    public function deleteAccountGroup(Request $request, string $id)
+    {
+        $tenantId = $this->tenantId();
+        $group = DB::table('account_groups')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$group, 404);
+
+        $accounts = (int) DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->where('account_group_id', $id)->count();
+        if ($accounts > 0) {
+            $msg = 'Cannot delete group: it is assigned to ' . $accounts . ' account(s). Reassign them first.';
+            return $request->expectsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->withErrors(['delete' => $msg]);
+        }
+
+        DB::table('account_groups')->where('tenant_id', $tenantId)->where('id', $id)->delete();
+        return $request->expectsJson() ? response()->json(['success' => true]) : back()->with('success', 'Account group deleted.');
+    }
+
+    private function chartOfAccountValidationRules(Request $request, int $tenantId, $ignoreId = null): array
+    {
+        $codeRule = \Illuminate\Validation\Rule::unique('chart_of_accounts', 'code');
+        if ($ignoreId) {
+            $codeRule = $codeRule->ignore($ignoreId);
+        }
+
+        return [
+            'code' => ['required', 'string', 'max:50', $codeRule],
+            'name' => ['required', 'string', 'max:255'],
+            'type' => ['required', 'string', 'in:asset,liability,equity,revenue,expense'],
+            'account_group_id' => ['nullable', 'integer'],
+            'parent_id' => ['nullable', 'integer'],
+            'allow_direct_posting' => ['nullable', 'boolean'],
+            'is_cash_account' => ['nullable', 'boolean'],
+            'is_bank_account' => ['nullable', 'boolean'],
+            'is_active' => ['nullable', 'boolean'],
+        ];
+    }
+
+    public function storeAccount(Request $request)
+    {
+        $tenantId = $this->tenantId();
+        $validated = $request->validate($this->chartOfAccountValidationRules($request, $tenantId));
+
+        $parentId = $validated['parent_id'] ?? null;
+        if ($parentId) {
+            $parent = DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->where('id', $parentId)->first();
+            if (!$parent) {
+                return back()->withErrors(['parent_id' => 'Selected parent account is invalid.'])->withInput();
+            }
+            if (($parent->type ?? null) && $parent->type !== $validated['type']) {
+                return back()->withErrors(['parent_id' => 'Parent account type must match the account type.'])->withInput();
+            }
+        }
+
+        $groupId = $validated['account_group_id'] ?? null;
+        if ($groupId) {
+            $group = DB::table('account_groups')->where('tenant_id', $tenantId)->where('id', $groupId)->first();
+            if (!$group) {
+                return back()->withErrors(['account_group_id' => 'Selected account group is invalid.'])->withInput();
+            }
+        }
+
+        try {
+            DB::table('chart_of_accounts')->insert([
+                'tenant_id' => $tenantId,
+                'code' => $validated['code'],
+                'name' => $validated['name'],
+                'type' => $validated['type'],
+                'account_group_id' => $groupId,
+                'parent_id' => $parentId,
+                'is_bank_account' => (bool) ($validated['is_bank_account'] ?? false),
+                'is_cash_account' => (bool) ($validated['is_cash_account'] ?? false),
+                'allow_direct_posting' => (bool) ($validated['allow_direct_posting'] ?? true),
+                'is_active' => (bool) ($validated['is_active'] ?? true),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            return back()->withErrors(['code' => 'Unable to create account. Account code may already exist.'])->withInput();
+        }
+
+        return redirect()->route('accounting.chart-of-accounts')->with('success', 'Account created successfully.');
+    }
+
+    public function editAccountPage(string $id): Response
+    {
+        $tenantId = $this->tenantId();
+        $account = DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$account, 404);
+
+        $parents = DB::table('chart_of_accounts')
+            ->where('tenant_id', $tenantId)
+            ->where('id', '!=', $id)
+            ->select(['id', 'code', 'name', 'type'])
+            ->orderBy('code')
+            ->get();
+
+        $groups = DB::table('account_groups')
+            ->where('tenant_id', $tenantId)
+            ->select(['id', 'code', 'name', 'type'])
+            ->orderBy('code')
+            ->get();
+
+        return Inertia::render('Accounting/AccountEdit', [
+            'account' => [
+                'id' => $account->id,
+                'code' => $account->code,
+                'name' => $account->name,
+                'type' => $account->type,
+                'account_group_id' => $account->account_group_id,
+                'parent_id' => $account->parent_id,
+                'allow_direct_posting' => (bool) $account->allow_direct_posting,
+                'is_cash_account' => (bool) $account->is_cash_account,
+                'is_bank_account' => (bool) $account->is_bank_account,
+                'is_active' => (bool) ($account->is_active ?? true),
+            ],
+            'parents' => $parents,
+            'groups' => $groups,
+        ]);
+    }
+
+    public function updateAccount(Request $request, string $id)
+    {
+        $tenantId = $this->tenantId();
+        $existing = DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$existing, 404);
+
+        $validated = $request->validate($this->chartOfAccountValidationRules($request, $tenantId, $id));
+
+        $parentId = $validated['parent_id'] ?? null;
+        if ($parentId) {
+            if ((string) $parentId === (string) $id) {
+                return back()->withErrors(['parent_id' => 'Account cannot be its own parent.'])->withInput();
+            }
+            $parent = DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->where('id', $parentId)->first();
+            if (!$parent) {
+                return back()->withErrors(['parent_id' => 'Selected parent account is invalid.'])->withInput();
+            }
+            if (($parent->type ?? null) && $parent->type !== $validated['type']) {
+                return back()->withErrors(['parent_id' => 'Parent account type must match the account type.'])->withInput();
+            }
+            // prevent cycles: selected parent must not be a descendant of this account
+            $cursor = $parentId;
+            $guard = 0;
+            while ($cursor && $guard < 50) {
+                if ((string) $cursor === (string) $id) {
+                    return back()->withErrors(['parent_id' => 'Invalid parent: cannot set a descendant account as parent (cycle).'])->withInput();
+                }
+                $cursor = DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->where('id', $cursor)->value('parent_id');
+                $guard++;
+            }
+        }
+
+        $groupId = $validated['account_group_id'] ?? null;
+        if ($groupId) {
+            $group = DB::table('account_groups')->where('tenant_id', $tenantId)->where('id', $groupId)->first();
+            if (!$group) {
+                return back()->withErrors(['account_group_id' => 'Selected account group is invalid.'])->withInput();
+            }
+        }
+
+        try {
+            DB::table('chart_of_accounts')
+                ->where('tenant_id', $tenantId)
+                ->where('id', $id)
+                ->update([
+                    'code' => $validated['code'],
+                    'name' => $validated['name'],
+                    'type' => $validated['type'],
+                    'account_group_id' => $groupId,
+                    'parent_id' => $parentId,
+                    'is_bank_account' => (bool) ($validated['is_bank_account'] ?? false),
+                    'is_cash_account' => (bool) ($validated['is_cash_account'] ?? false),
+                    'allow_direct_posting' => (bool) ($validated['allow_direct_posting'] ?? true),
+                    'is_active' => (bool) ($validated['is_active'] ?? $existing->is_active ?? true),
+                    'updated_at' => now(),
+                ]);
+        } catch (\Throwable $e) {
+            return back()->withErrors(['code' => 'Unable to update account. Account code may already exist.'])->withInput();
+        }
+
+        return redirect()->route('accounting.chart-of-accounts')->with('success', 'Account updated successfully.');
+    }
+
+    public function toggleAccount(Request $request, string $id)
+    {
+        $tenantId = $this->tenantId();
+        $account = DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$account, 404);
+
+        $new = !(bool) ($account->is_active ?? true);
+        DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->where('id', $id)->update([
+            'is_active' => $new,
+            'updated_at' => now(),
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'is_active' => $new]);
+        }
+
+        return back()->with('success', $new ? 'Account activated.' : 'Account deactivated.');
+    }
+
+    public function bulkToggleAccounts(Request $request)
+    {
+        $tenantId = $this->tenantId();
+        $action = $request->input('action');
+        if (!in_array($action, ['activate', 'deactivate'], true)) {
+            return $request->expectsJson()
+                ? response()->json(['success' => false, 'message' => 'Invalid bulk action.'], 422)
+                : back()->withErrors(['bulk' => 'Invalid bulk action.']);
+        }
+
+        $ids = array_filter((array) $request->input('ids', []));
+        $q = trim((string) $request->input('q', ''));
+        $type = $request->input('type');
+        $status = $request->input('status');
+        $usage = $request->input('usage');
+        $posting = $request->input('posting');
+        $flag = $request->input('flag');
+        $hasChildren = $request->input('has_children');
+        $groupId = $request->input('group');
+
+        $query = DB::table('chart_of_accounts as coa')
+            ->leftJoin('chart_of_accounts as parent', 'parent.id', '=', 'coa.parent_id')
+            ->leftJoin('account_groups as ag', 'ag.id', '=', 'coa.account_group_id')
+            ->where('coa.tenant_id', $tenantId);
+
+        if (!empty($ids)) {
+            $query->whereIn('coa.id', $ids);
+        } else {
+            if ($q !== '') {
+                $query->where(function ($n) use ($q) {
+                    $n->where('coa.code', 'ilike', "%{$q}%")
+                        ->orWhere('coa.name', 'ilike', "%{$q}%")
+                        ->orWhere('parent.name', 'ilike', "%{$q}%")
+                        ->orWhere('ag.name', 'ilike', "%{$q}%");
+                });
+            }
+            if ($type && $type !== 'all') $query->where('coa.type', $type);
+            if ($status === 'active') $query->where('coa.is_active', true);
+            elseif ($status === 'inactive') $query->where('coa.is_active', false);
+            if ($posting === 'direct') $query->where('coa.allow_direct_posting', true);
+            elseif ($posting === 'blocked') $query->where('coa.allow_direct_posting', false);
+            if ($flag === 'cash') $query->where('coa.is_cash_account', true);
+            elseif ($flag === 'bank') $query->where('coa.is_bank_account', true);
+            if ($groupId) $query->where('coa.account_group_id', $groupId);
+            if ($usage === 'used') $query->whereRaw('(SELECT COUNT(*) FROM journal_lines jl2 WHERE jl2.account_id = coa.id AND jl2.tenant_id = ?) > 0', [$tenantId]);
+            elseif ($usage === 'unused') $query->whereRaw('(SELECT COUNT(*) FROM journal_lines jl2 WHERE jl2.account_id = coa.id AND jl2.tenant_id = ?) = 0', [$tenantId]);
+            if ($hasChildren === 'yes') $query->whereRaw('(SELECT COUNT(*) FROM chart_of_accounts c3 WHERE c3.parent_id = coa.id AND c3.tenant_id = ?) > 0', [$tenantId]);
+            elseif ($hasChildren === 'no') $query->whereRaw('(SELECT COUNT(*) FROM chart_of_accounts c3 WHERE c3.parent_id = coa.id AND c3.tenant_id = ?) = 0', [$tenantId]);
+        }
+
+        $targetIds = $query->pluck('coa.id')->all();
+        $count = count($targetIds);
+
+        if ($count > 0) {
+            DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->whereIn('id', $targetIds)->update([
+                'is_active' => $action === 'activate',
+                'updated_at' => now(),
+            ]);
+        }
+
+        $label = $action === 'activate' ? 'activated' : 'deactivated';
+
+        return $request->expectsJson()
+            ? response()->json(['success' => true, 'count' => $count])
+            : back()->with('success', "{$count} account(s) {$label}.");
+    }
+
+    public function exportChartOfAccounts(Request $request)
+    {
+        $tenantId = $this->tenantId();
+        $childrenSub = DB::table('chart_of_accounts as c2')
+            ->selectRaw('COUNT(*)')
+            ->whereColumn('c2.parent_id', 'coa.id')
+            ->where('c2.tenant_id', $tenantId);
+        $journalSub = DB::table('journal_lines as jl')
+            ->selectRaw('COUNT(*)')
+            ->whereColumn('jl.account_id', 'coa.id')
+            ->where('jl.tenant_id', $tenantId);
+        $balanceSub = DB::table('journal_lines as jlb')
+            ->join('journal_entries as je', 'je.id', '=', 'jlb.entry_id')
+            ->selectRaw('COALESCE(SUM(jlb.debit_amount_base - jlb.credit_amount_base), 0)')
+            ->whereColumn('jlb.account_id', 'coa.id')
+            ->where('jlb.tenant_id', $tenantId)
+            ->where('je.status', 'posted');
+
+        $rows = DB::table('chart_of_accounts as coa')
+            ->leftJoin('chart_of_accounts as p', 'p.id', '=', 'coa.parent_id')
+            ->leftJoin('account_groups as ag', 'ag.id', '=', 'coa.account_group_id')
+            ->where('coa.tenant_id', $tenantId)
+            ->select([
+                'coa.code', 'coa.name', 'coa.type', 'p.code as parent_code', 'ag.name as group_name',
+                'coa.allow_direct_posting', 'coa.is_cash_account', 'coa.is_bank_account', 'coa.is_active',
+            ])
+            ->selectSub($childrenSub, 'children_count')
+            ->selectSub($journalSub, 'journal_lines_count')
+            ->selectSub($balanceSub, 'posted_balance')
+            ->orderBy('coa.code')
+            ->get();
+
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['Code', 'Name', 'Type', 'Parent Code', 'Group', 'Posted Balance', 'Children', 'Journal Lines', 'Direct Posting', 'Cash', 'Bank', 'Status']);
+            foreach ($rows as $r) {
+                fputcsv($out, [
+                    $r->code, $r->name, $r->type, $r->parent_code, $r->group_name,
+                    (float) ($r->posted_balance ?? 0),
+                    (int) ($r->children_count ?? 0),
+                    (int) ($r->journal_lines_count ?? 0),
+                    !empty($r->allow_direct_posting) ? 'yes' : 'no',
+                    !empty($r->is_cash_account) ? 'yes' : 'no',
+                    !empty($r->is_bank_account) ? 'yes' : 'no',
+                    !empty($r->is_active) ? 'active' : 'inactive',
+                ]);
+            }
+            fclose($out);
+        }, 'chart_of_accounts_' . now()->format('Ymd_His') . '.csv', ['Content-Type' => 'text/csv']);
+    }
+
+    public function deleteAccount(Request $request, string $id)
+    {
+        $tenantId = $this->tenantId();
+        $account = DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$account, 404);
+
+        $children = (int) DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->where('parent_id', $id)->count();
+        if ($children > 0) {
+            $msg = 'Cannot delete account: it has child accounts. Reassign or remove children first.';
+            return $request->expectsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->withErrors(['delete' => $msg]);
+        }
+
+        try {
+            $journalLines = (int) DB::table('journal_lines')->where('tenant_id', $tenantId)->where('account_id', $id)->count();
+        } catch (\Throwable $e) {
+            $journalLines = 0;
+        }
+        if ($journalLines > 0) {
+            $msg = 'Cannot delete account: it has posted/linked journal lines. Deactivate it instead.';
+            return $request->expectsJson() ? response()->json(['success' => false, 'message' => $msg], 422) : back()->withErrors(['delete' => $msg]);
+        }
+
+        DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->where('id', $id)->delete();
+
+        return $request->expectsJson()
+            ? response()->json(['success' => true])
+            : redirect()->route('accounting.chart-of-accounts')->with('success', 'Account deleted successfully.');
+    }
+
+    public function duplicateAccountPage(string $id): Response
+    {
+        $tenantId = $this->tenantId();
+        $account = DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$account, 404);
+
+        $parents = DB::table('chart_of_accounts')
+            ->where('tenant_id', $tenantId)
+            ->select(['id', 'code', 'name', 'type'])
+            ->orderBy('code')
+            ->get();
+        $groups = DB::table('account_groups')
+            ->where('tenant_id', $tenantId)
+            ->select(['id', 'code', 'name', 'type'])
+            ->orderBy('code')
+            ->get();
+
+        $suggested = trim((string) ($account->code ?? ''));
+        $suggested = $suggested !== '' ? ($suggested . '-COPY') : '';
+
+        return Inertia::render('Accounting/AccountCreate', [
+            'parents' => $parents,
+            'groups' => $groups,
+            'prefill' => [
+                'code' => $suggested,
+                'name' => trim((string) ($account->name ?? '')) . ' (Copy)',
+                'type' => $account->type ?? 'asset',
+                'account_group_id' => $account->account_group_id,
+                'parent_id' => $account->parent_id,
+                'allow_direct_posting' => (bool) ($account->allow_direct_posting ?? true),
+                'is_cash_account' => (bool) ($account->is_cash_account ?? false),
+                'is_bank_account' => (bool) ($account->is_bank_account ?? false),
+                'is_active' => (bool) ($account->is_active ?? true),
+            ],
+        ]);
+    }
+
+    public function showAccountPage(string $id): Response
+    {
+        $tenantId = $this->tenantId();
+        $account = DB::table('chart_of_accounts as coa')
+            ->leftJoin('chart_of_accounts as p', 'p.id', '=', 'coa.parent_id')
+            ->leftJoin('account_groups as ag', 'ag.id', '=', 'coa.account_group_id')
+            ->where('coa.tenant_id', $tenantId)
+            ->where('coa.id', $id)
+            ->select([
+                'coa.id', 'coa.code', 'coa.name', 'coa.type', 'coa.parent_id', 'coa.account_group_id',
+                'coa.allow_direct_posting', 'coa.is_cash_account', 'coa.is_bank_account', 'coa.is_active',
+                'coa.created_at', 'coa.updated_at',
+                'p.code as parent_code', 'p.name as parent_name',
+                'ag.code as group_code', 'ag.name as group_name',
+            ])->first();
+        abort_if(!$account, 404);
+
+        $children = DB::table('chart_of_accounts')
+            ->where('tenant_id', $tenantId)
+            ->where('parent_id', $id)
+            ->select(['id', 'code', 'name', 'type', 'is_active'])
+            ->orderBy('code')
+            ->get()
+            ->map(fn ($r) => [
+                'id' => $r->id, 'code' => $r->code, 'name' => $r->name, 'type' => $r->type,
+                'is_active' => (bool) ($r->is_active ?? true),
+            ])->values();
+
+        try {
+            $posted = DB::table('journal_lines as jl')
+                ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
+                ->where('jl.tenant_id', $tenantId)
+                ->where('jl.account_id', $id)
+                ->where('je.status', 'posted');
+            $debit = (float) (clone $posted)->sum('jl.debit_amount_base');
+            $credit = (float) (clone $posted)->sum('jl.credit_amount_base');
+            $postedCount = (int) (clone $posted)->count();
+        } catch (\Throwable $e) {
+            $debit = 0.0; $credit = 0.0; $postedCount = 0;
+        }
+        try {
+            $totalLines = (int) DB::table('journal_lines')->where('tenant_id', $tenantId)->where('account_id', $id)->count();
+        } catch (\Throwable $e) { $totalLines = 0; }
+
+        $recentLines = [];
+        try {
+            $recentLines = DB::table('journal_lines as jl')
+                ->leftJoin('journal_entries as je', 'je.id', '=', 'jl.entry_id')
+                ->where('jl.tenant_id', $tenantId)
+                ->where('jl.account_id', $id)
+                ->select([
+                    'jl.id', 'jl.debit_amount_base', 'jl.credit_amount_base', 'jl.description as line_description', 'jl.created_at',
+                    'je.reference as entry_reference', 'je.posting_date', 'je.status as entry_status', 'je.description as entry_description',
+                ])
+                ->orderByDesc('je.posting_date')
+                ->orderByDesc('jl.id')
+                ->limit(15)
+                ->get()
+                ->map(fn ($r) => [
+                    'id' => $r->id,
+                    'entry_reference' => $r->entry_reference,
+                    'posting_date' => $r->posting_date ? Carbon::parse($r->posting_date)->format('d M Y') : null,
+                    'entry_status' => $r->entry_status,
+                    'debit' => (float) ($r->debit_amount_base ?? 0),
+                    'credit' => (float) ($r->credit_amount_base ?? 0),
+                    'description' => $r->line_description ?: $r->entry_description,
+                ])->values();
+        } catch (\Throwable $e) { $recentLines = []; }
+
+        $balance = $debit - $credit;
+
+        $auditHistory = [];
+        try {
+            $auditHistory = DB::table('audit_logs as al')
+                ->leftJoin('users as u', 'u.id', '=', 'al.user_id')
+                ->where('al.tenant_id', $tenantId)
+                ->where('al.subject_id', $id)
+                ->where(function ($q) {
+                    $q->where('al.subject_type', 'ilike', '%account%');
+                })
+                ->select(['al.id', 'al.action', 'al.old_values', 'al.new_values', 'al.created_at', 'u.name as user_name'])
+                ->orderByDesc('al.created_at')
+                ->limit(25)
+                ->get()
+                ->map(function ($r) {
+                    $old = $r->old_values;
+                    $new = $r->new_values;
+                    if (is_string($old)) { $d = json_decode($old, true); if ($d !== null) $old = $d; }
+                    if (is_string($new)) { $d = json_decode($new, true); if ($d !== null) $new = $d; }
+                    return [
+                        'id' => $r->id,
+                        'action' => $r->action,
+                        'user_name' => $r->user_name ?: 'System',
+                        'created_at' => $r->created_at ? Carbon::parse($r->created_at)->format('d M Y, H:i') : null,
+                        'old_values' => is_array($old) ? json_encode($old, JSON_UNESCAPED_UNICODE) : (string) ($old ?? ''),
+                        'new_values' => is_array($new) ? json_encode($new, JSON_UNESCAPED_UNICODE) : (string) ($new ?? ''),
+                    ];
+                })->values();
+        } catch (\Throwable $e) {
+            try {
+                $auditHistory = DB::table('audit_trail as at')
+                    ->leftJoin('users as u', 'u.id', '=', 'at.user_id')
+                    ->where('at.tenant_id', $tenantId)
+                    ->where('at.record_id', $id)
+                    ->where('at.table_name', 'chart_of_accounts')
+                    ->select(['at.id', 'at.event_type as action', 'at.old_values', 'at.new_values', 'at.created_at', 'u.name as user_name'])
+                    ->orderByDesc('at.created_at')
+                    ->limit(25)
+                    ->get()
+                    ->map(fn ($r) => [
+                        'id' => $r->id,
+                        'action' => $r->action,
+                        'user_name' => $r->user_name ?: 'System',
+                        'created_at' => $r->created_at ? Carbon::parse($r->created_at)->format('d M Y, H:i') : null,
+                        'old_values' => is_string($r->old_values) ? $r->old_values : json_encode($r->old_values),
+                        'new_values' => is_string($r->new_values) ? $r->new_values : json_encode($r->new_values),
+                    ])->values();
+            } catch (\Throwable $e2) {
+                $auditHistory = [];
+            }
+        }
+
+        return Inertia::render('Accounting/AccountShow', [
+            'account' => [
+                'id' => $account->id,
+                'code' => $account->code,
+                'name' => $account->name,
+                'type' => $account->type,
+                'parent_id' => $account->parent_id,
+                'parent_label' => $account->parent_code ? ($account->parent_code . ' — ' . $account->parent_name) : null,
+                'group_label' => $account->group_name ? (($account->group_code ? $account->group_code . ' — ' : '') . $account->group_name) : null,
+                'allow_direct_posting' => (bool) $account->allow_direct_posting,
+                'is_cash_account' => (bool) $account->is_cash_account,
+                'is_bank_account' => (bool) $account->is_bank_account,
+                'is_active' => (bool) ($account->is_active ?? true),
+                'created_at' => $account->created_at ? Carbon::parse($account->created_at)->format('d M Y, H:i') : null,
+                'updated_at' => $account->updated_at ? Carbon::parse($account->updated_at)->format('d M Y, H:i') : null,
+            ],
+            'children' => $children,
+            'stats' => [
+                'children_count' => $children->count(),
+                'journal_lines_count' => $totalLines,
+                'posted_lines_count' => $postedCount,
+                'posted_debit' => $debit,
+                'posted_credit' => $credit,
+                'posted_balance' => $balance,
+            ],
+            'recent_lines' => $recentLines,
+            'audit_history' => $auditHistory,
+        ]);
+    }
+
+    public function accountLedger(Request $request, string $id): Response
+    {
+        $tenantId = $this->tenantId();
+        $account = DB::table('chart_of_accounts')
+            ->where('tenant_id', $tenantId)
+            ->where('id', $id)
+            ->first();
+        abort_if(!$account, 404);
+
+        $from = $request->query('from');
+        $to = $request->query('to');
+        $status = $request->query('status', 'posted');
+
+        $base = DB::table('journal_lines as jl')
+            ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
+            ->where('jl.tenant_id', $tenantId)
+            ->where('jl.account_id', $id)
+            ->where('je.tenant_id', $tenantId);
+        if ($status && $status !== 'all') {
+            $base->where('je.status', $status);
+        }
+
+        $openingQuery = (clone $base);
+        if ($from) $openingQuery->whereDate('je.posting_date', '<', $from);
+        try {
+            $openingBalance = (float) $openingQuery->selectRaw('COALESCE(SUM(jl.debit_amount_base - jl.credit_amount_base), 0) as bal')->value('bal');
+        } catch (\Throwable $e) {
+            $openingBalance = 0.0;
+        }
+
+        $linesQuery = (clone $base);
+        if ($from) $linesQuery->whereDate('je.posting_date', '>=', $from);
+        if ($to) $linesQuery->whereDate('je.posting_date', '<=', $to);
+
+        try {
+            $raw = $linesQuery->select([
+                'jl.id', 'jl.debit_amount_base', 'jl.credit_amount_base', 'jl.description as line_description',
+                'je.reference as entry_reference', 'je.posting_date', 'je.status as entry_status', 'je.description as entry_description',
+            ])
+                ->orderBy('je.posting_date')
+                ->orderBy('jl.id')
+                ->limit(5000)
+                ->get();
+        } catch (\Throwable $e) {
+            $raw = collect();
+        }
+
+        $running = $openingBalance;
+        $totalDebit = 0.0;
+        $totalCredit = 0.0;
+        $lines = $raw->map(function ($r) use (&$running, &$totalDebit, &$totalCredit) {
+            $debit = (float) ($r->debit_amount_base ?? 0);
+            $credit = (float) ($r->credit_amount_base ?? 0);
+            $totalDebit += $debit;
+            $totalCredit += $credit;
+            $running += $debit - $credit;
+
+            return [
+                'id' => $r->id,
+                'posting_date' => $r->posting_date ? Carbon::parse($r->posting_date)->format('d M Y') : null,
+                'entry_reference' => $r->entry_reference,
+                'entry_status' => $r->entry_status,
+                'description' => $r->line_description ?: $r->entry_description,
+                'debit' => $debit,
+                'credit' => $credit,
+                'balance' => $running,
+            ];
+        })->values();
+
+        $closingBalance = $openingBalance + $totalDebit - $totalCredit;
+
+        return Inertia::render('Accounting/AccountLedger', [
+            'account' => [
+                'id' => $account->id,
+                'code' => $account->code,
+                'name' => $account->name,
+                'type' => $account->type,
+            ],
+            'lines' => $lines,
+            'summary' => [
+                'opening_balance' => $openingBalance,
+                'total_debit' => $totalDebit,
+                'total_credit' => $totalCredit,
+                'closing_balance' => $closingBalance,
+                'line_count' => $lines->count(),
+            ],
+            'filters' => ['from' => $from, 'to' => $to, 'status' => $status ?? 'posted'],
+        ]);
+    }
+
+    public function exportAccountLedger(Request $request, string $id)
+    {
+        $tenantId = $this->tenantId();
+        $account = DB::table('chart_of_accounts')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$account, 404);
+
+        $from = $request->query('from');
+        $to = $request->query('to');
+        $status = $request->query('status', 'posted');
+
+        $query = DB::table('journal_lines as jl')
+            ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
+            ->where('jl.tenant_id', $tenantId)
+            ->where('jl.account_id', $id)
+            ->where('je.tenant_id', $tenantId);
+        if ($status && $status !== 'all') $query->where('je.status', $status);
+        if ($from) $query->whereDate('je.posting_date', '>=', $from);
+        if ($to) $query->whereDate('je.posting_date', '<=', $to);
+
+        $rows = $query->select([
+            'je.posting_date', 'je.reference as entry_reference', 'je.status as entry_status',
+            'jl.description as line_description', 'je.description as entry_description',
+            'jl.debit_amount_base', 'jl.credit_amount_base',
+        ])->orderBy('je.posting_date')->orderBy('jl.id')->get();
+
+        return response()->streamDownload(function () use ($rows, $account) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['Account', $account->code . ' — ' . $account->name]);
+            fputcsv($out, ['Date', 'Entry Reference', 'Status', 'Description', 'Debit', 'Credit']);
+            foreach ($rows as $r) {
+                fputcsv($out, [
+                    $r->posting_date ? Carbon::parse($r->posting_date)->format('Y-m-d') : '',
+                    $r->entry_reference,
+                    $r->entry_status,
+                    $r->line_description ?: $r->entry_description,
+                    (float) ($r->debit_amount_base ?? 0),
+                    (float) ($r->credit_amount_base ?? 0),
+                ]);
+            }
+            fclose($out);
+        }, 'ledger_' . preg_replace('/[^A-Za-z0-9_-]/', '_', (string) $account->code) . '_' . now()->format('Ymd_His') . '.csv', ['Content-Type' => 'text/csv']);
     }
 
     public function createInventoryMovement(): Response
@@ -1093,44 +3615,246 @@ class PageController extends Controller
 
     // ============ Warehouses ============
 
-    public function warehouses(): Response
+    public function warehouses(Request $request): Response
     {
         $tenantId = $this->tenantId();
 
-        $query = DB::table('warehouses')
-            ->where('tenant_id', $tenantId)
-            ->select(['id', 'code', 'name', 'type', 'location', 'is_active'])
-            ->orderBy('code');
+        $query = DB::table('warehouses as w')
+            ->leftJoin('factories as f', 'f.id', '=', 'w.factory_id')
+            ->where('w.tenant_id', $tenantId)
+            ->select([
+                'w.id', 'w.code', 'w.name', 'w.type', 'w.address as location', 'w.is_active',
+                'f.name as factory_name',
+            ])
+            ->selectSub(function ($q) {
+                $q->from('warehouse_bins as wb')
+                    ->whereColumn('wb.warehouse_id', 'w.id')
+                    ->selectRaw('COUNT(*)');
+            }, 'bin_count')
+            ->orderBy('w.code');
 
-        $payload = $this->paginate(
-            $this->search($query, request('q'), ['code', 'name', 'type', 'location'])
-        );
+        $q = trim((string) $request->query('q', ''));
+        if ($q !== '') {
+            $query->where(function ($nested) use ($q) {
+                $nested->where('w.code', 'ilike', "%{$q}%")
+                    ->orWhere('w.name', 'ilike', "%{$q}%")
+                    ->orWhere('w.type', 'ilike', "%{$q}%")
+                    ->orWhere('w.address', 'ilike', "%{$q}%")
+                    ->orWhere('f.name', 'ilike', "%{$q}%");
+            });
+        }
+
+        $type = $request->query('type');
+        if ($type) {
+            $query->where('w.type', $type);
+        }
+
+        $status = $request->query('status');
+        if ($status === 'active') {
+            $query->where('w.is_active', true);
+        } elseif ($status === 'inactive') {
+            $query->where('w.is_active', false);
+        }
+
+        $payload = $this->paginate($query);
 
         $payload['data'] = array_map(function (array $row) {
             $row['status'] = $row['is_active'] ? 'active' : 'inactive';
+            $row['bin_count'] = (int) ($row['bin_count'] ?? 0);
             unset($row['is_active']);
 
             return $row;
         }, $payload['data']);
 
-        $summary = DB::table('warehouses')
-            ->where('tenant_id', $tenantId)
+        $base = DB::table('warehouses')->where('tenant_id', $tenantId);
+        $summary = (clone $base)
             ->selectRaw('COUNT(*) as total')
             ->selectRaw('COUNT(*) FILTER (WHERE is_active) as active')
+            ->selectRaw('COUNT(*) FILTER (WHERE NOT is_active) as inactive')
             ->first();
+
+        $byType = (clone $base)
+            ->select('type', DB::raw('COUNT(*) as count'))
+            ->groupBy('type')
+            ->orderByDesc('count')
+            ->get()
+            ->map(fn ($r) => ['type' => $r->type ?? 'general', 'count' => (int) $r->count])
+            ->values()
+            ->all();
+
+        $totalBins = (int) DB::table('warehouse_bins as wb')
+            ->join('warehouses as w', 'w.id', '=', 'wb.warehouse_id')
+            ->where('w.tenant_id', $tenantId)
+            ->count();
 
         return Inertia::render('Warehouses', [
             'warehouses' => $payload,
             'warehouse_summary' => [
-                'total' => (int) $summary->total,
-                'active' => (int) $summary->active,
+                'total' => (int) ($summary->total ?? 0),
+                'active' => (int) ($summary->active ?? 0),
+                'inactive' => (int) ($summary->inactive ?? 0),
+                'total_bins' => $totalBins,
+                'by_type' => $byType,
+            ],
+            'filters' => [
+                'q' => $q,
+                'type' => $type,
+                'status' => $status,
             ],
         ]);
     }
 
     public function createWarehouse(): Response
     {
-        return Inertia::render('Warehouses/Create');
+        $factories = DB::table('factories')
+            ->where('tenant_id', $this->tenantId())
+            ->select(['id', 'name'])
+            ->orderBy('name')
+            ->get();
+
+        return Inertia::render('Warehouses/Create', [
+            'factories' => $factories,
+        ]);
+    }
+
+    public function storeWarehouse(Request $request)
+    {
+        $tenantId = $this->tenantId();
+
+        $validated = $request->validate([
+            'code' => 'nullable|string|max:50',
+            'name' => 'required|string|max:255',
+            'type' => 'nullable|string|max:50',
+            'location' => 'nullable|string|max:255',
+            'factory_id' => 'nullable|integer',
+            'is_active' => 'nullable|boolean',
+        ]);
+
+        $factoryId = $validated['factory_id'] ?? (int) DB::table('factories')
+            ->where('tenant_id', $tenantId)
+            ->orderBy('id')
+            ->value('id');
+
+        if (!$factoryId) {
+            $factoryId = (int) DB::table('factories')->orderBy('id')->value('id');
+        }
+        if (!$factoryId) {
+            return back()->withErrors(['name' => 'No factory found. Please create a factory before adding warehouses.'])->withInput();
+        }
+
+        DB::table('warehouses')->insert([
+            'tenant_id' => $tenantId,
+            'factory_id' => $factoryId ?: null,
+            'code' => $validated['code'] ?? null,
+            'name' => $validated['name'],
+            'type' => $validated['type'] ?? 'general',
+            'address' => $validated['location'] ?? null,
+            'is_active' => (bool) ($validated['is_active'] ?? true),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return redirect()->route('warehouses')->with('success', 'Warehouse created successfully.');
+    }
+
+    public function editWarehouse(string $id): Response
+    {
+        $tenantId = $this->tenantId();
+        $warehouse = DB::table('warehouses')
+            ->where('tenant_id', $tenantId)
+            ->where('id', $id)
+            ->first();
+
+        abort_if(!$warehouse, 404);
+
+        $factories = DB::table('factories')
+            ->where('tenant_id', $tenantId)
+            ->select(['id', 'name'])
+            ->orderBy('name')
+            ->get();
+
+        return Inertia::render('Warehouses/Edit', [
+            'warehouse' => [
+                'id' => $warehouse->id,
+                'code' => $warehouse->code,
+                'name' => $warehouse->name,
+                'type' => $warehouse->type,
+                'location' => $warehouse->address ?? '',
+                'factory_id' => $warehouse->factory_id,
+                'is_active' => (bool) $warehouse->is_active,
+            ],
+            'factories' => $factories,
+        ]);
+    }
+
+    public function updateWarehouse(Request $request, string $id)
+    {
+        $tenantId = $this->tenantId();
+        $existing = DB::table('warehouses')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$existing, 404);
+
+        $validated = $request->validate([
+            'code' => 'nullable|string|max:50',
+            'name' => 'required|string|max:255',
+            'type' => 'nullable|string|max:50',
+            'location' => 'nullable|string|max:255',
+            'factory_id' => 'nullable|integer',
+            'is_active' => 'nullable|boolean',
+        ]);
+
+        $factoryId = $validated['factory_id'] ?? $existing->factory_id;
+
+        DB::table('warehouses')
+            ->where('tenant_id', $tenantId)
+            ->where('id', $id)
+            ->update([
+                'code' => $validated['code'] ?? null,
+                'name' => $validated['name'],
+                'type' => $validated['type'] ?? 'general',
+                'address' => $validated['location'] ?? null,
+                'factory_id' => $factoryId,
+                'is_active' => (bool) ($validated['is_active'] ?? false),
+                'updated_at' => now(),
+            ]);
+
+        return redirect()->route('warehouses')->with('success', 'Warehouse updated successfully.');
+    }
+
+    public function toggleWarehouse(Request $request, string $id)
+    {
+        $tenantId = $this->tenantId();
+        $warehouse = DB::table('warehouses')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$warehouse, 404);
+
+        $new = !(bool) $warehouse->is_active;
+        DB::table('warehouses')->where('id', $id)->update(['is_active' => $new, 'updated_at' => now()]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'is_active' => $new]);
+        }
+
+        return back()->with('success', $new ? 'Warehouse activated.' : 'Warehouse deactivated.');
+    }
+
+    public function exportWarehouses(Request $request)
+    {
+        $tenantId = $this->tenantId();
+        $rows = DB::table('warehouses as w')
+            ->leftJoin('factories as f', 'f.id', '=', 'w.factory_id')
+            ->where('w.tenant_id', $tenantId)
+            ->select(['w.code', 'w.name', 'w.type', 'w.address as location', 'w.is_active', 'f.name as factory_name'])
+            ->orderBy('w.code')
+            ->get();
+
+        $filename = 'warehouses_' . now()->format('Ymd_His') . '.csv';
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['Code', 'Name', 'Type', 'Location', 'Status', 'Factory']);
+            foreach ($rows as $r) {
+                fputcsv($out, [$r->code, $r->name, $r->type, $r->location, $r->is_active ? 'active' : 'inactive', $r->factory_name]);
+            }
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv']);
     }
 
     // ============ Manufacturing — BOMs ============
@@ -1737,50 +4461,239 @@ class PageController extends Controller
 
     // ============ Accounting Advanced — Bank Reconciliation ============
 
-    public function bankReconciliation(): Response
+    public function bankReconciliation(Request $request): Response
     {
         $tenantId = $this->tenantId();
+        $status = (string) $request->query('status', '');
+        $from = $request->query('from');
+        $to = $request->query('to');
 
         $query = DB::table('bank_reconciliations as br')
             ->leftJoin('chart_of_accounts as coa', 'coa.id', '=', 'br.account_id')
             ->where('br.tenant_id', $tenantId)
             ->select([
-                'br.id', 'br.reference', 'coa.name as account_name',
+                'br.id', 'br.account_id', 'br.reference', 'coa.name as account_name',
                 'br.statement_date', 'br.book_balance', 'br.bank_balance',
                 'br.status', 'br.reconciled_date',
             ])
             ->orderByDesc('br.statement_date')
             ->orderByDesc('br.id');
 
+        if (in_array($status, ['open', 'pending', 'reconciled'], true)) {
+            $query->where('br.status', $status);
+        }
+        if ($from) $query->whereDate('br.statement_date', '>=', $from);
+        if ($to) $query->whereDate('br.statement_date', '<=', $to);
+
         $payload = $this->paginate(
-            $this->search($query, request('q'), ['br.reference', 'coa.name'])
+            $this->search($query, $request->query('q'), ['br.reference', 'coa.name'])
         );
 
         $payload['data'] = array_map(function (array $row) {
             $row['statement_date'] = $this->day($row['statement_date']);
             $row['reconciled_date'] = $this->day($row['reconciled_date']);
-            $row['status_label'] = ucfirst(str_replace('_', ' ', $row['status']));
+            $row['status_label'] = ucfirst(str_replace('_', ' ', (string) $row['status']));
+            $row['difference'] = (float) ($row['bank_balance'] ?? 0) - (float) ($row['book_balance'] ?? 0);
 
             return $row;
         }, $payload['data']);
 
+        $summary = DB::table('bank_reconciliations')
+            ->where('tenant_id', $tenantId)
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw("COUNT(*) FILTER (WHERE status = 'reconciled') as reconciled")
+            ->selectRaw("COUNT(*) FILTER (WHERE status != 'reconciled') as pending")
+            ->selectRaw('COALESCE(SUM(bank_balance), 0) as bank_total')
+            ->selectRaw('COALESCE(SUM(book_balance), 0) as book_total')
+            ->first();
+
         return Inertia::render('Accounting/BankReconciliation', [
             'reconciliations' => $payload,
+            'filters' => ['status' => $status, 'from' => $from ?? '', 'to' => $to ?? ''],
+            'reconciliation_summary' => [
+                'total' => (int) ($summary->total ?? 0),
+                'reconciled' => (int) ($summary->reconciled ?? 0),
+                'pending' => (int) ($summary->pending ?? 0),
+                'bank_total' => $this->money($summary->bank_total ?? 0),
+                'book_total' => $this->money($summary->book_total ?? 0),
+            ],
         ]);
     }
 
     public function createBankReconciliation(): Response
     {
+        $tenantId = $this->tenantId();
+
         $accounts = DB::table('chart_of_accounts')
-            ->where('tenant_id', $this->tenantId())
+            ->where('tenant_id', $tenantId)
             ->where('is_bank_account', true)
+            ->where('is_active', true)
             ->select(['id', 'code', 'name'])
             ->orderBy('code')
-            ->get();
+            ->get()
+            ->map(function ($account) use ($tenantId) {
+                $debit = (float) DB::table('journal_lines as jl')
+                    ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
+                    ->where('je.tenant_id', $tenantId)
+                    ->where('je.status', 'posted')
+                    ->where('jl.account_id', $account->id)
+                    ->sum('jl.debit_amount_base');
+                $credit = (float) DB::table('journal_lines as jl')
+                    ->join('journal_entries as je', 'je.id', '=', 'jl.entry_id')
+                    ->where('je.tenant_id', $tenantId)
+                    ->where('je.status', 'posted')
+                    ->where('jl.account_id', $account->id)
+                    ->sum('jl.credit_amount_base');
+
+                return [
+                    'id' => $account->id,
+                    'code' => $account->code,
+                    'name' => $account->name,
+                    'book_balance' => round($debit - $credit, 2),
+                ];
+            })
+            ->values();
+
+        $suggestedReference = 'BR-' . now()->format('Ymd') . '-'
+            . str_pad((string) ((int) DB::table('bank_reconciliations')->where('reference', 'like', 'BR-' . now()->format('Ymd') . '-%')->count() + 1), 4, '0', STR_PAD_LEFT);
 
         return Inertia::render('Accounting/CreateBankReconciliation', [
             'accounts' => $accounts,
+            'suggested_reference' => $suggestedReference,
+            'default_date' => now()->format('Y-m-d'),
         ]);
+    }
+
+    public function storeBankReconciliation(Request $request)
+    {
+        $tenantId = $this->tenantId();
+
+        $validated = $request->validate([
+            'reference' => ['required', 'string', 'max:100'],
+            'account_id' => ['required', 'integer'],
+            'statement_date' => ['required', 'date'],
+            'book_balance' => ['required', 'numeric'],
+            'bank_balance' => ['required', 'numeric'],
+            'status' => ['nullable', 'in:open,pending,reconciled'],
+        ]);
+
+        $account = DB::table('chart_of_accounts')
+            ->where('tenant_id', $tenantId)
+            ->where('is_bank_account', true)
+            ->where('id', (int) $validated['account_id'])
+            ->first();
+        if (!$account) {
+            return back()->withErrors(['account_id' => 'Select a valid bank account from the Chart of Accounts.'])->withInput();
+        }
+
+        $factoryId = (int) DB::table('factories')->where('tenant_id', $tenantId)->orderBy('id')->value('id');
+        if (!$factoryId) {
+            return back()->withErrors(['account_id' => 'Set up a factory for this tenant before reconciling bank accounts.'])->withInput();
+        }
+
+        $status = $validated['status'] ?? 'open';
+
+        DB::table('bank_reconciliations')->insert([
+            'tenant_id' => $tenantId,
+            'factory_id' => $factoryId,
+            'account_id' => $account->id,
+            'reference' => trim((string) $validated['reference']),
+            'statement_date' => Carbon::parse($validated['statement_date'])->toDateString(),
+            'book_balance' => round((float) $validated['book_balance'], 2),
+            'bank_balance' => round((float) $validated['bank_balance'], 2),
+            'status' => $status,
+            'reconciled_date' => $status === 'reconciled' ? now()->toDateString() : null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return redirect()->route('accounting.bank-reconciliation')
+            ->with('success', 'Bank reconciliation ' . trim((string) $validated['reference']) . ' created successfully.');
+    }
+
+    public function reconcileBankReconciliation(Request $request, string $id)
+    {
+        $tenantId = $this->tenantId();
+        $reconciliation = DB::table('bank_reconciliations')
+            ->where('tenant_id', $tenantId)
+            ->where('id', $id)
+            ->first();
+        abort_if(!$reconciliation, 404);
+
+        if ($reconciliation->status === 'reconciled') {
+            return back()->withErrors(['reconciliation' => 'This reconciliation is already marked as reconciled.']);
+        }
+
+        DB::table('bank_reconciliations')->where('id', $id)->where('tenant_id', $tenantId)->update([
+            'status' => 'reconciled',
+            'reconciled_date' => now()->toDateString(),
+            'updated_at' => now(),
+        ]);
+
+        return back()->with('success', 'Reconciliation ' . ($reconciliation->reference ?: '#' . $id) . ' marked as reconciled.');
+    }
+
+    public function deleteBankReconciliation(string $id)
+    {
+        $tenantId = $this->tenantId();
+        $reconciliation = DB::table('bank_reconciliations')
+            ->where('tenant_id', $tenantId)
+            ->where('id', $id)
+            ->first();
+        abort_if(!$reconciliation, 404);
+
+        DB::table('bank_reconciliations')->where('id', $id)->where('tenant_id', $tenantId)->delete();
+
+        return redirect()->route('accounting.bank-reconciliation')->with('success', 'Bank reconciliation deleted.');
+    }
+
+    public function exportBankReconciliations(Request $request)
+    {
+        $tenantId = $this->tenantId();
+        $status = (string) $request->query('status', '');
+        $from = $request->query('from');
+        $to = $request->query('to');
+
+        $query = DB::table('bank_reconciliations as br')
+            ->leftJoin('chart_of_accounts as coa', 'coa.id', '=', 'br.account_id')
+            ->where('br.tenant_id', $tenantId)
+            ->select([
+                'br.reference', 'coa.name as account_name', 'br.statement_date',
+                'br.book_balance', 'br.bank_balance', 'br.status', 'br.reconciled_date',
+            ])
+            ->orderByDesc('br.statement_date')
+            ->orderByDesc('br.id');
+        if (in_array($status, ['open', 'pending', 'reconciled'], true)) $query->where('br.status', $status);
+        if ($from) $query->whereDate('br.statement_date', '>=', $from);
+        if ($to) $query->whereDate('br.statement_date', '<=', $to);
+
+        $q = trim((string) $request->query('q', ''));
+        if ($q !== '') {
+            $query->where(function ($sub) use ($q) {
+                $sub->where('br.reference', 'ilike', '%' . $q . '%')
+                    ->orWhere('coa.name', 'ilike', '%' . $q . '%');
+            });
+        }
+
+        $rows = $query->limit(20000)->get();
+
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['Reference', 'Bank Account', 'Statement Date', 'Book Balance', 'Bank Balance', 'Difference', 'Status', 'Reconciled On']);
+            foreach ($rows as $r) {
+                fputcsv($out, [
+                    $r->reference,
+                    $r->account_name,
+                    $r->statement_date ? Carbon::parse($r->statement_date)->format('Y-m-d') : '',
+                    (float) $r->book_balance,
+                    (float) $r->bank_balance,
+                    (float) $r->bank_balance - (float) $r->book_balance,
+                    $r->status,
+                    $r->reconciled_date ? Carbon::parse($r->reconciled_date)->format('Y-m-d') : '',
+                ]);
+            }
+            fclose($out);
+        }, 'bank_reconciliations_' . now()->format('Ymd_His') . '.csv', ['Content-Type' => 'text/csv']);
     }
 
     // ============ Production Advanced — Scheduling ============
@@ -2067,21 +4980,27 @@ class PageController extends Controller
 
         $query = DB::table('work_orders as wo')
             ->leftJoin('production_orders as po', 'po.id', '=', 'wo.production_order_id')
-            ->leftJoin('items as i', 'i.id', '=', 'po.item_id')
+            ->leftJoin('boms as b', 'b.id', '=', 'po.bom_header_id')
+            ->leftJoin('items as i', 'i.id', '=', 'b.item_id')
             ->where('wo.tenant_id', $tenantId)
             ->select([
-                'wo.id', 'wo.work_order_number', 'wo.status',
-                'wo.planned_start_date', 'wo.planned_end_date',
-                'wo.actual_start_date', 'wo.actual_end_date',
-                'wo.quantity', 'wo.completed_quantity',
+                'wo.id',
+                DB::raw("CONCAT('WO-', wo.id) as work_order_number"),
+                'wo.status',
+                'wo.started_at as planned_start_date',
+                'wo.completed_at as planned_end_date',
+                'wo.started_at as actual_start_date',
+                'wo.completed_at as actual_end_date',
+                'wo.planned_quantity as quantity',
+                'wo.actual_quantity as completed_quantity',
                 'po.order_number as production_order',
                 'i.name as item_name',
             ])
-            ->orderByDesc('wo.planned_start_date')
+            ->orderByDesc('wo.started_at')
             ->orderByDesc('wo.id');
 
         $payload = $this->paginate(
-            $this->search($query, request('q'), ['wo.work_order_number', 'po.order_number', 'i.name'])
+            $this->search($query, request('q'), ['po.order_number', 'i.name'])
         );
 
         $payload['data'] = array_map(function (array $row) {
@@ -2089,10 +5008,10 @@ class PageController extends Controller
             $row['planned_end_date'] = $this->day($row['planned_end_date']);
             $row['actual_start_date'] = $this->day($row['actual_start_date']);
             $row['actual_end_date'] = $this->day($row['actual_end_date']);
-            $row['status_label'] = ucfirst(str_replace('_', ' ', $row['status']));
-            $row['completion_pct'] = $row['quantity'] > 0
-                ? round(($row['completed_quantity'] / $row['quantity']) * 100, 1)
-                : 0;
+            $row['status_label'] = ucfirst(str_replace('_', ' ', $row['status'] ?? 'draft'));
+            $qty = (float) ($row['quantity'] ?? 0);
+            $done = (float) ($row['completed_quantity'] ?? 0);
+            $row['completion_pct'] = $qty > 0 ? round(($done / $qty) * 100, 1) : 0;
 
             return $row;
         }, $payload['data']);
@@ -2318,27 +5237,49 @@ class PageController extends Controller
     {
         $tenantId = $this->tenantId();
 
-        $query = DB::table('fixed_assets as fa')
-            ->leftJoin('chart_of_accounts as coa', 'coa.id', '=', 'fa.account_id')
-            ->where('fa.tenant_id', $tenantId)
-            ->select([
-                'fa.id', 'fa.asset_code', 'fa.asset_name', 'fa.asset_category',
-                'fa.purchase_date', 'fa.purchase_cost', 'fa.accumulated_depreciation',
-                'fa.net_book_value', 'fa.status', 'fa.location',
-                'coa.name as account_name',
-            ])
-            ->orderBy('fa.asset_code');
+        $hasAssetName = Schema::hasColumn('fixed_assets', 'asset_name');
+        $nameCol = $hasAssetName ? 'asset_name' : 'name';
+        $categoryCol = $hasAssetName ? 'asset_category' : 'category';
+        $dateCol = $hasAssetName ? 'purchase_date' : 'acquisition_date';
+        $costCol = $hasAssetName ? 'purchase_cost' : 'acquisition_cost';
+        $hasLocation = Schema::hasColumn('fixed_assets', 'location');
+        $hasAccount = Schema::hasColumn('fixed_assets', 'account_id');
 
-        $payload = $this->paginate(
-            $this->search($query, request('q'), ['fa.asset_code', 'fa.asset_name', 'fa.location'])
-        );
+        $query = DB::table('fixed_assets as fa')
+            ->where('fa.tenant_id', $tenantId);
+
+        $select = [
+            'fa.id',
+            'fa.asset_code',
+            "fa.{$nameCol} as asset_name",
+            "fa.{$categoryCol} as asset_category",
+            "fa.{$dateCol} as purchase_date",
+            "fa.{$costCol} as purchase_cost",
+            'fa.accumulated_depreciation',
+            'fa.status',
+        ];
+        if ($hasLocation) $select[] = 'fa.location';
+        if ($hasAccount) $query->leftJoin('chart_of_accounts as coa', 'coa.id', '=', 'fa.account_id');
+        if ($hasAccount) $select[] = 'fa.account_id';
+        if ($hasAccount) $select[] = 'coa.name as account_name';
+
+        $query->select($select)->orderBy('fa.asset_code');
+
+        $searchColumns = ['fa.asset_code', "fa.{$nameCol}"];
+        if ($hasLocation) $searchColumns[] = 'fa.location';
+
+        $payload = $this->paginate($this->search($query, request('q'), $searchColumns));
 
         $payload['data'] = array_map(function (array $row) {
-            $row['purchase_date'] = $this->day($row['purchase_date']);
-            $row['purchase_cost'] = $this->money($row['purchase_cost']);
-            $row['accumulated_depreciation'] = $this->money($row['accumulated_depreciation']);
-            $row['net_book_value'] = $this->money($row['net_book_value']);
-            $row['status_label'] = ucfirst(str_replace('_', ' ', $row['status']));
+            $cost = (float) ($row['purchase_cost'] ?? 0);
+            $accumulated = (float) ($row['accumulated_depreciation'] ?? 0);
+
+            $row['purchase_date'] = $this->day($row['purchase_date'] ?? null);
+            $row['purchase_cost'] = $this->money($cost);
+            $row['accumulated_depreciation'] = $this->money($accumulated);
+            $row['net_book_value'] = $this->money($cost - $accumulated);
+            $row['status_label'] = ucfirst(str_replace('_', ' ', (string) ($row['status'] ?? '')));
+            $row['location'] = $row['location'] ?? null;
 
             return $row;
         }, $payload['data']);
@@ -2346,8 +5287,8 @@ class PageController extends Controller
         $summary = DB::table('fixed_assets')
             ->where('tenant_id', $tenantId)
             ->selectRaw('COUNT(*) as total')
-            ->selectRaw('COALESCE(SUM(purchase_cost), 0) as total_cost')
-            ->selectRaw('COALESCE(SUM(net_book_value), 0) as total_nbv')
+            ->selectRaw("COALESCE(SUM({$costCol}), 0) as total_cost")
+            ->selectRaw("COALESCE(SUM({$costCol} - accumulated_depreciation), 0) as total_nbv")
             ->first();
 
         return Inertia::render('Accounting/FixedAssets', [
@@ -2371,6 +5312,218 @@ class PageController extends Controller
 
         return Inertia::render('Accounting/CreateFixedAsset', [
             'accounts' => $accounts,
+        ]);
+    }
+
+    public function storeFixedAsset(Request $request)
+    {
+        $tenantId = $this->tenantId();
+
+        $validated = $request->validate([
+            'asset_code' => ['required', 'string', 'max:60'],
+            'asset_name' => ['required', 'string', 'max:200'],
+            'asset_category' => ['nullable', 'string', 'max:100'],
+            'account_id' => ['nullable', 'integer'],
+            'purchase_date' => ['required', 'date'],
+            'purchase_cost' => ['required', 'numeric', 'min:0'],
+            'salvage_value' => ['nullable', 'numeric', 'min:0'],
+            'useful_life_years' => ['required', 'integer', 'min:1', 'max:60'],
+            'location' => ['nullable', 'string', 'max:200'],
+            'status' => ['nullable', 'in:active,disposed,retired'],
+        ]);
+
+        $code = trim((string) $validated['asset_code']);
+        $exists = DB::table('fixed_assets')
+            ->where('tenant_id', $tenantId)
+            ->where('asset_code', $code)
+            ->exists();
+        if ($exists) {
+            return back()->withErrors(['asset_code' => 'This asset code is already in use.'])->withInput();
+        }
+
+        $companyId = (int) DB::table('companies')->where('tenant_id', $tenantId)->orderBy('id')->value('id');
+        $factoryId = (int) DB::table('factories')->where('tenant_id', $tenantId)->orderBy('id')->value('id');
+        if (!$companyId) {
+            return back()->withErrors(['asset_code' => 'Set up a company for this tenant before creating fixed assets.'])->withInput();
+        }
+
+        $hasAssetName = Schema::hasColumn('fixed_assets', 'asset_name');
+        $hasLocation = Schema::hasColumn('fixed_assets', 'location');
+        $hasAccount = Schema::hasColumn('fixed_assets', 'account_id');
+        $hasFactory = Schema::hasColumn('fixed_assets', 'factory_id');
+        $hasNetBook = Schema::hasColumn('fixed_assets', 'net_book_value');
+        $hasSalvage = Schema::hasColumn('fixed_assets', 'salvage_value');
+        $hasLife = Schema::hasColumn('fixed_assets', 'useful_life_years');
+
+        if ($hasFactory && !$factoryId) {
+            return back()->withErrors(['asset_code' => 'Set up a factory for this tenant before creating fixed assets.'])->withInput();
+        }
+
+        $accountId = (int) ($validated['account_id'] ?? 0);
+        if ($accountId > 0) {
+            $validAccount = DB::table('chart_of_accounts')
+                ->where('tenant_id', $tenantId)
+                ->where('type', 'asset')
+                ->where('id', $accountId)
+                ->exists();
+            if (!$validAccount) {
+                return back()->withErrors(['account_id' => 'Select a valid asset account.'])->withInput();
+            }
+        }
+        if ($hasAccount && !$accountId) {
+            $accountId = (int) DB::table('chart_of_accounts')
+                ->where('tenant_id', $tenantId)
+                ->where('type', 'asset')
+                ->orderBy('code')
+                ->value('id');
+            if (!$accountId) {
+                return back()->withErrors(['account_id' => 'Create at least one asset account in the Chart of Accounts first.'])->withInput();
+            }
+        }
+
+        $cost = round((float) $validated['purchase_cost'], 2);
+        $salvage = round((float) ($validated['salvage_value'] ?? 0), 2);
+        $life = (int) $validated['useful_life_years'];
+        $purchaseDate = Carbon::parse($validated['purchase_date']);
+        $status = $validated['status'] ?? 'active';
+        $category = trim((string) ($validated['asset_category'] ?? '')) ?: 'General';
+
+        $data = [
+            'tenant_id' => $tenantId,
+            'company_id' => $companyId,
+            'asset_code' => $code,
+            'accumulated_depreciation' => 0,
+            'status' => $status,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+        if ($hasFactory && $factoryId) $data['factory_id'] = $factoryId;
+        if ($hasLocation) $data['location'] = $validated['location'] ?? null;
+        if ($hasAccount) $data['account_id'] = $accountId;
+        if ($hasSalvage) $data['salvage_value'] = $salvage;
+        if ($hasLife) $data['useful_life_years'] = $life;
+        if ($hasNetBook) $data['net_book_value'] = $cost;
+
+        if ($hasAssetName) {
+            $data['asset_name'] = $validated['asset_name'];
+            $data['asset_category'] = $category;
+            $data['purchase_date'] = $purchaseDate->toDateString();
+            $data['purchase_cost'] = $cost;
+        } else {
+            $data['name'] = $validated['asset_name'];
+            $data['category'] = $category;
+            $data['acquisition_date'] = $purchaseDate->toDateString();
+            $data['acquisition_cost'] = $cost;
+        }
+
+        $assetId = DB::transaction(function () use ($data, $tenantId, $cost, $salvage, $life, $purchaseDate) {
+            $assetId = DB::table('fixed_assets')->insertGetId($data);
+
+            if (Schema::hasTable('fixed_asset_depreciation') && $life > 0) {
+                $depreciable = max(0, $cost - $salvage);
+                $annual = $depreciable > 0 ? round($depreciable / $life, 2) : 0;
+                if ($annual > 0) {
+                    $accumulated = 0.0;
+                    $rows = [];
+                    for ($year = 1; $year <= $life; $year++) {
+                        $start = $purchaseDate->copy()->addYears($year - 1)->startOfDay();
+                        $end = $start->copy()->addYear()->subDay();
+                        $amount = $year === $life ? round($depreciable - $accumulated, 2) : $annual;
+                        $accumulated = round($accumulated + $amount, 2);
+
+                        $rows[] = [
+                            'tenant_id' => $tenantId,
+                            'fixed_asset_id' => $assetId,
+                            'period_start' => $start->toDateString(),
+                            'period_end' => $end->toDateString(),
+                            'depreciation_amount' => $amount,
+                            'accumulated_depreciation' => $accumulated,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ];
+                    }
+                    DB::table('fixed_asset_depreciation')->insert($rows);
+                }
+            }
+
+            return $assetId;
+        });
+
+        return redirect()->route('accounting.fixed-assets')
+            ->with('success', 'Fixed asset ' . $code . ' created successfully with depreciation schedule.');
+    }
+
+    public function fixedAssetShow(string $id): Response
+    {
+        $tenantId = $this->tenantId();
+
+        $hasAssetName = Schema::hasColumn('fixed_assets', 'asset_name');
+        $nameCol = $hasAssetName ? 'asset_name' : 'name';
+        $categoryCol = $hasAssetName ? 'asset_category' : 'category';
+        $dateCol = $hasAssetName ? 'purchase_date' : 'acquisition_date';
+        $costCol = $hasAssetName ? 'purchase_cost' : 'acquisition_cost';
+        $hasLocation = Schema::hasColumn('fixed_assets', 'location');
+        $hasAccount = Schema::hasColumn('fixed_assets', 'account_id');
+        $hasSalvage = Schema::hasColumn('fixed_assets', 'salvage_value');
+        $hasLife = Schema::hasColumn('fixed_assets', 'useful_life_years');
+
+        $query = DB::table('fixed_assets as fa')->where('fa.tenant_id', $tenantId)->where('fa.id', $id);
+        $select = [
+            'fa.id', 'fa.asset_code', "fa.{$nameCol} as asset_name", "fa.{$categoryCol} as asset_category",
+            "fa.{$dateCol} as purchase_date", "fa.{$costCol} as purchase_cost", 'fa.accumulated_depreciation', 'fa.status',
+        ];
+        if ($hasLocation) $select[] = 'fa.location';
+        if ($hasSalvage) $select[] = 'fa.salvage_value';
+        if ($hasLife) $select[] = 'fa.useful_life_years';
+        if ($hasAccount) {
+            $query->leftJoin('chart_of_accounts as coa', 'coa.id', '=', 'fa.account_id');
+            $select[] = 'fa.account_id';
+            $select[] = 'coa.code as account_code';
+            $select[] = 'coa.name as account_name';
+        }
+        $asset = $query->select($select)->first();
+        abort_if(!$asset, 404);
+
+        $cost = (float) ($asset->purchase_cost ?? 0);
+        $accumulated = (float) ($asset->accumulated_depreciation ?? 0);
+
+        $schedule = collect();
+        if (Schema::hasTable('fixed_asset_depreciation')) {
+            $schedule = DB::table('fixed_asset_depreciation')
+                ->where('tenant_id', $tenantId)
+                ->where('fixed_asset_id', $id)
+                ->orderBy('period_start')
+                ->get()
+                ->map(fn ($r) => [
+                    'id' => $r->id,
+                    'period_start' => $r->period_start ? Carbon::parse($r->period_start)->format('d M Y') : null,
+                    'period_end' => $r->period_end ? Carbon::parse($r->period_end)->format('d M Y') : null,
+                    'depreciation_amount' => (float) $r->depreciation_amount,
+                    'accumulated_depreciation' => (float) $r->accumulated_depreciation,
+                    'net_book_value' => max(0, $cost - (float) $r->accumulated_depreciation),
+                ])
+                ->values();
+        }
+
+        return Inertia::render('Accounting/FixedAssetShow', [
+            'asset' => [
+                'id' => $asset->id,
+                'asset_code' => $asset->asset_code,
+                'asset_name' => $asset->asset_name,
+                'asset_category' => $asset->asset_category,
+                'purchase_date' => $asset->purchase_date ? Carbon::parse($asset->purchase_date)->format('d M Y') : null,
+                'purchase_cost' => $cost,
+                'salvage_value' => (float) ($asset->salvage_value ?? 0),
+                'useful_life_years' => (int) ($asset->useful_life_years ?? 0),
+                'accumulated_depreciation' => $accumulated,
+                'net_book_value' => $cost - $accumulated,
+                'status' => $asset->status,
+                'location' => $asset->location ?? null,
+                'account_id' => $asset->account_id ?? null,
+                'account_code' => $asset->account_code ?? null,
+                'account_name' => $asset->account_name ?? null,
+            ],
+            'schedule' => $schedule,
         ]);
     }
 
@@ -2648,39 +5801,162 @@ class PageController extends Controller
 
     // ============ Notifications — Real-time with Sound ============
 
-    public function notifications(): Response
+    public function notifications(Request $request): Response
     {
         $tenantId = $this->tenantId();
+        $q = trim((string) $request->query('q', ''));
+        $type = $request->query('type', 'all');
+        $status = $request->query('status', 'all');
 
-        $query = DB::table('notifications as n')
-            ->leftJoin('users as u', 'u.id', '=', 'n.user_id')
-            ->where('n.tenant_id', $tenantId)
-            ->select([
-                'n.id', 'n.title', 'n.body', 'n.type', 'n.data',
-                'n.read_at', 'n.created_at',
-                'u.name as actor_name',
-            ])
-            ->orderByDesc('n.created_at');
+        try {
+            $query = DB::table('notifications as n')
+                ->leftJoin('users as u', 'u.id', '=', 'n.user_id')
+                ->where('n.tenant_id', $tenantId)
+                ->select([
+                    'n.id', 'n.title', 'n.type', 'n.data',
+                    DB::raw("COALESCE(n.body, n.message, '') as body"),
+                    'n.read_at', DB::raw('COALESCE(n.is_read, false) as is_read_flag'), 'n.created_at',
+                    'u.name as actor_name',
+                ])
+                ->orderByDesc('n.created_at');
 
-        $payload = $this->paginate($query);
+            if ($q !== '') {
+                $query->where(function ($nested) use ($q) {
+                    $nested->where('n.title', 'ilike', "%{$q}%")
+                        ->orWhere(DB::raw("COALESCE(n.body, n.message, '')"), 'ilike', "%{$q}%")
+                        ->orWhere('u.name', 'ilike', "%{$q}%");
+                });
+            }
+            if ($type && $type !== 'all') $query->where('n.type', $type);
+            if ($status === 'unread') $query->whereNull('n.read_at')->where(function ($n2) { $n2->whereNull('n.is_read')->orWhere('n.is_read', false); });
+            elseif ($status === 'read') $query->where(function ($nested) { $nested->whereNotNull('n.read_at')->orWhere('n.is_read', true); });
 
-        $payload['data'] = array_map(function (array $row) {
-            $row['created_at'] = $this->day($row['created_at']);
-            $row['is_read'] = !is_null($row['read_at']);
-            $row['data'] = is_string($row['data']) ? json_decode($row['data'], true) : ($row['data'] ?? []);
+            $payload = $this->paginate($query);
+            $payload['data'] = array_map(function (array $row) {
+                $row['is_read'] = !is_null($row['read_at']) || (bool) ($row['is_read_flag'] ?? false);
+                unset($row['is_read_flag']);
+                $row['created_at'] = $row['created_at'] ? Carbon::parse($row['created_at'])->format('d M Y, H:i') : null;
+                $row['data'] = is_string($row['data']) ? (json_decode($row['data'], true) ?: []) : ($row['data'] ?? []);
+                $row['actor_name'] = $row['actor_name'] ?? 'System';
+                $row['type'] = $row['type'] ?? 'info';
+                $row['body'] = $row['body'] ?? '';
+                return $row;
+            }, $payload['data']);
 
-            return $row;
-        }, $payload['data']);
+            $base = DB::table('notifications')->where('tenant_id', $tenantId);
+            $unreadCount = (int) (clone $base)->whereNull('read_at')->where(function ($n2) { $n2->whereNull('is_read')->orWhere('is_read', false); })->count();
+            $totalCount = (int) (clone $base)->count();
+            $byType = (clone $base)->select('type', DB::raw('COUNT(*) as count'))->groupBy('type')->get()->mapWithKeys(fn ($r) => [($r->type ?? 'info') => (int) $r->count])->all();
 
-        $unreadCount = (int) DB::table('notifications')
+            return Inertia::render('Notifications', [
+                'notifications' => $payload,
+                'unread_count' => $unreadCount,
+                'notification_summary' => ['total' => $totalCount, 'unread' => $unreadCount, 'read' => max(0, $totalCount - $unreadCount), 'by_type' => $byType],
+                'filters' => ['q' => $q, 'type' => $type ?: 'all', 'status' => $status ?: 'all'],
+            ]);
+        } catch (\Throwable $e) {
+            // Fallback for schema variants (e.g. body vs message, no is_read column)
+            $query = DB::table('notifications as n')
+                ->leftJoin('users as u', 'u.id', '=', 'n.user_id')
+                ->where('n.tenant_id', $tenantId)
+                ->select(['n.id', 'n.title', 'n.type', 'n.data', 'n.body', 'n.message', 'n.read_at', 'n.created_at', 'u.name as actor_name'])
+                ->orderByDesc('n.created_at');
+
+            if ($q !== '') {
+                $query->where(function ($nested) use ($q) {
+                    $nested->where('n.title', 'ilike', "%{$q}%")
+                        ->orWhere('n.body', 'ilike', "%{$q}%")
+                        ->orWhere('n.message', 'ilike', "%{$q}%")
+                        ->orWhere('u.name', 'ilike', "%{$q}%");
+                });
+            }
+            if ($type && $type !== 'all') $query->where('n.type', $type);
+            if ($status === 'unread') $query->whereNull('n.read_at');
+            elseif ($status === 'read') $query->whereNotNull('n.read_at');
+
+            $payload = $this->paginate($query);
+            $payload['data'] = array_map(function (array $row) {
+                $row['body'] = $row['body'] ?? $row['message'] ?? '';
+                unset($row['message']);
+                $row['is_read'] = !is_null($row['read_at']);
+                $row['created_at'] = $row['created_at'] ? Carbon::parse($row['created_at'])->format('d M Y, H:i') : null;
+                $row['data'] = is_string($row['data']) ? (json_decode($row['data'], true) ?: []) : ($row['data'] ?? []);
+                $row['actor_name'] = $row['actor_name'] ?? 'System';
+                $row['type'] = $row['type'] ?? 'info';
+                return $row;
+            }, $payload['data']);
+
+            $base = DB::table('notifications')->where('tenant_id', $tenantId);
+            $unreadCount = (int) (clone $base)->whereNull('read_at')->count();
+            $totalCount = (int) (clone $base)->count();
+            $byType = (clone $base)->select('type', DB::raw('COUNT(*) as count'))->groupBy('type')->get()->mapWithKeys(fn ($r) => [($r->type ?? 'info') => (int) $r->count])->all();
+
+            return Inertia::render('Notifications', [
+                'notifications' => $payload,
+                'unread_count' => $unreadCount,
+                'notification_summary' => ['total' => $totalCount, 'unread' => $unreadCount, 'read' => max(0, $totalCount - $unreadCount), 'by_type' => $byType],
+                'filters' => ['q' => $q, 'type' => $type ?: 'all', 'status' => $status ?: 'all'],
+            ]);
+        }
+    }
+
+    public function deleteNotification(Request $request, string $id)
+    {
+        $tenantId = $this->tenantId();
+        $deleted = DB::table('notifications')->where('tenant_id', $tenantId)->where('id', $id)->delete();
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => (bool) $deleted]);
+        }
+
+        return back()->with('success', 'Notification deleted.');
+    }
+
+    public function deleteAllReadNotifications(Request $request)
+    {
+        $tenantId = $this->tenantId();
+        $count = DB::table('notifications')
             ->where('tenant_id', $tenantId)
-            ->whereNull('read_at')
-            ->count();
+            ->where(function ($nested) {
+                $nested->whereNotNull('read_at')->orWhere('is_read', true);
+            })
+            ->delete();
 
-        return Inertia::render('Notifications', [
-            'notifications' => $payload,
-            'unread_count' => $unreadCount,
-        ]);
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'deleted' => $count]);
+        }
+
+        return back()->with('success', "Deleted {$count} read notifications.");
+    }
+
+    public function exportNotifications(Request $request)
+    {
+        $tenantId = $this->tenantId();
+        try {
+            $rows = DB::table('notifications as n')
+                ->leftJoin('users as u', 'u.id', '=', 'n.user_id')
+                ->where('n.tenant_id', $tenantId)
+                ->select(['n.id', 'n.title', DB::raw("COALESCE(n.body, n.message, '') as body"), 'n.type', 'n.read_at', 'n.created_at', 'u.name as actor_name'])
+                ->orderByDesc('n.created_at')
+                ->get();
+        } catch (\Throwable $e) {
+            $rows = DB::table('notifications as n')
+                ->leftJoin('users as u', 'u.id', '=', 'n.user_id')
+                ->where('n.tenant_id', $tenantId)
+                ->select(['n.id', 'n.title', 'n.body', 'n.type', 'n.read_at', 'n.created_at', 'u.name as actor_name'])
+                ->orderByDesc('n.created_at')
+                ->get();
+        }
+
+        $filename = 'notifications_' . now()->format('Ymd_His') . '.csv';
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['ID', 'Title', 'Message', 'Type', 'Status', 'Actor', 'Created At']);
+            foreach ($rows as $r) {
+                fputcsv($out, [$r->id, $r->title, $r->body ?? '', $r->type ?? 'info', !empty($r->read_at) ? 'read' : 'unread', $r->actor_name ?? 'System', $r->created_at]);
+            }
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv']);
     }
 
     public function notificationUnreadCount(): Response
@@ -3005,17 +6281,23 @@ class PageController extends Controller
 
         $workOrders = DB::table('work_orders as wo')
             ->leftJoin('production_orders as po', 'po.id', '=', 'wo.production_order_id')
-            ->leftJoin('items as i', 'i.id', '=', 'po.item_id')
+            ->leftJoin('boms as b', 'b.id', '=', 'po.bom_header_id')
+            ->leftJoin('items as i', 'i.id', '=', 'b.item_id')
             ->where('wo.tenant_id', $tenantId)
             ->select([
-                'wo.id', 'wo.work_order_number', 'wo.status',
-                'wo.planned_start_date', 'wo.planned_end_date',
-                'wo.actual_start_date', 'wo.actual_end_date',
-                'wo.quantity', 'wo.completed_quantity',
+                'wo.id',
+                DB::raw("CONCAT('WO-', wo.id) as work_order_number"),
+                'wo.status',
+                'wo.started_at as planned_start_date',
+                'wo.completed_at as planned_end_date',
+                'wo.started_at as actual_start_date',
+                'wo.completed_at as actual_end_date',
+                'wo.planned_quantity as quantity',
+                'wo.actual_quantity as completed_quantity',
                 'po.order_number as production_order',
                 'i.name as item_name',
             ])
-            ->orderBy('wo.planned_start_date')
+            ->orderBy('wo.started_at')
             ->get();
 
         $workCentres = DB::table('work_centres')
@@ -3045,17 +6327,23 @@ class PageController extends Controller
 
         $ganttData = DB::table('work_orders as wo')
             ->leftJoin('production_orders as po', 'po.id', '=', 'wo.production_order_id')
-            ->leftJoin('items as i', 'i.id', '=', 'po.item_id')
+            ->leftJoin('boms as b', 'b.id', '=', 'po.bom_header_id')
+            ->leftJoin('items as i', 'i.id', '=', 'b.item_id')
             ->where('wo.tenant_id', $tenantId)
             ->select([
-                'wo.id', 'wo.work_order_number', 'wo.status',
-                'wo.planned_start_date', 'wo.planned_end_date',
-                'wo.actual_start_date', 'wo.actual_end_date',
-                'wo.quantity', 'wo.completed_quantity',
+                'wo.id',
+                DB::raw("CONCAT('WO-', wo.id) as work_order_number"),
+                'wo.status',
+                'wo.started_at as planned_start_date',
+                'wo.completed_at as planned_end_date',
+                'wo.started_at as actual_start_date',
+                'wo.completed_at as actual_end_date',
+                'wo.planned_quantity as quantity',
+                'wo.actual_quantity as completed_quantity',
                 'po.order_number as production_order',
                 'i.name as item_name',
             ])
-            ->orderBy('wo.planned_start_date')
+            ->orderBy('wo.started_at')
             ->get();
 
         return Inertia::render('APS/Gantt', [
@@ -3491,50 +6779,179 @@ class PageController extends Controller
 
     // ============ Compliance & Audit — Audit Trail ============
 
-    public function auditTrail(): Response
+    public function auditTrail(Request $request): Response
     {
         $tenantId = $this->tenantId();
+        $q = trim((string) $request->query('q', ''));
+        $event = $request->query('event');
 
-        $auditLogs = DB::table('audit_trail as at')
-            ->leftJoin('users as u', 'u.id', '=', 'at.user_id')
-            ->where('at.tenant_id', $tenantId)
-            ->select(['at.id', 'at.event_type', 'at.table_name', 'at.record_id',
-                'at.old_values', 'at.new_values', 'at.created_at',
-                'u.name as user_name'])
-            ->orderByDesc('at.created_at')
-            ->paginate(50);
+        $build = function (string $table, array $map) use ($tenantId, $q, $event) {
+            $query = DB::table($table . ' as a')
+                ->leftJoin('users as u', 'u.id', '=', DB::raw($map['user']))
+                ->where(DB::raw($map['tenant']), $tenantId)
+                ->select([
+                    'a.id',
+                    DB::raw($map['event'] . ' as event_type'),
+                    DB::raw($map['table'] . ' as table_name'),
+                    DB::raw($map['record'] . ' as record_id'),
+                    DB::raw($map['old'] . ' as old_values'),
+                    DB::raw($map['new'] . ' as new_values'),
+                    DB::raw($map['created'] . ' as created_at'),
+                    'u.name as user_name',
+                ])
+                ->orderByDesc(DB::raw($map['created']));
+
+            if ($q !== '') {
+                $query->where(function ($n) use ($q, $map) {
+                    $n->where(DB::raw($map['event']), 'ilike', "%{$q}%")
+                      ->orWhere(DB::raw($map['table']), 'ilike', "%{$q}%")
+                      ->orWhere('u.name', 'ilike', "%{$q}%");
+                });
+            }
+            if ($event) $query->where(DB::raw($map['event']), $event);
+            return $query;
+        };
+
+        try {
+            $payload = $this->paginate($build('audit_trail', [
+                'user' => 'a.user_id', 'tenant' => 'a.tenant_id', 'event' => 'a.event_type', 'table' => 'a.table_name',
+                'record' => 'a.record_id', 'old' => 'a.old_values', 'new' => 'a.new_values', 'created' => 'a.created_at',
+            ]));
+        } catch (\Throwable $e) {
+            $payload = $this->paginate($build('audit_logs', [
+                'user' => 'a.user_id', 'tenant' => 'a.tenant_id', 'event' => 'a.action', 'table' => 'a.subject_type',
+                'record' => 'a.subject_id', 'old' => 'a.old_values', 'new' => 'a.new_values', 'created' => 'a.created_at',
+            ]));
+        }
+
+        $payload['data'] = array_map(function (array $row) {
+            $row['created_at'] = $row['created_at'] ? Carbon::parse($row['created_at'])->format('d M Y, H:i:s') : null;
+            $row['user_name'] = $row['user_name'] ?? 'System';
+            foreach (['old_values', 'new_values'] as $k) {
+                if (is_string($row[$k] ?? null)) {
+                    $decoded = json_decode($row[$k], true);
+                    $row[$k] = $decoded ? json_encode($decoded, JSON_UNESCAPED_UNICODE) : $row[$k];
+                } elseif (is_array($row[$k] ?? null)) {
+                    $row[$k] = json_encode($row[$k], JSON_UNESCAPED_UNICODE);
+                }
+            }
+            return $row;
+        }, $payload['data']);
 
         return Inertia::render('Compliance/AuditTrail', [
-            'audit_logs' => $auditLogs,
+            'audit_logs' => $payload,
+            'filters' => ['q' => $q, 'event' => $event],
         ]);
+    }
+
+    public function exportAuditTrail(Request $request)
+    {
+        $tenantId = $this->tenantId();
+        try {
+            $rows = DB::table('audit_trail')->where('tenant_id', $tenantId)->orderByDesc('created_at')->limit(5000)->get();
+            $map = fn($r) => [$r->created_at, $r->event_type ?? '', $r->table_name ?? '', $r->record_id ?? '', $r->user_id ?? '', $r->old_values ?? '', $r->new_values ?? ''];
+        } catch (\Throwable $e) {
+            $rows = DB::table('audit_logs')->where('tenant_id', $tenantId)->orderByDesc('created_at')->limit(5000)->get();
+            $map = fn($r) => [$r->created_at, $r->action ?? '', $r->subject_type ?? '', $r->subject_id ?? '', $r->user_id ?? '', $r->old_values ?? '', $r->new_values ?? ''];
+        }
+
+        return response()->streamDownload(function () use ($rows, $map) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['Timestamp', 'Event', 'Entity', 'Record ID', 'User ID', 'Old Values', 'New Values']);
+            foreach ($rows as $r) fputcsv($out, $map($r));
+            fclose($out);
+        }, 'audit_trail_' . now()->format('Ymd_His') . '.csv', ['Content-Type' => 'text/csv']);
     }
 
     // ============ Workflow Automation — Approvals ============
 
-    public function approvals(): Response
+    public function approvals(Request $request): Response
     {
         $tenantId = $this->tenantId();
+        $status = $request->query('status');
+        $q = trim((string) $request->query('q', ''));
 
-        $approvals = DB::table('workflow_approvals as wa')
+        $query = DB::table('workflow_approvals as wa')
             ->leftJoin('users as u', 'u.id', '=', 'wa.approver_id')
             ->where('wa.tenant_id', $tenantId)
-            ->select(['wa.id', 'wa.workflow_type', 'wa.reference_number',
-                'wa.status', 'wa.requested_at', 'wa.approved_at',
-                'wa.comments', 'u.name as approver_name'])
-            ->orderByDesc('wa.requested_at')
-            ->get();
+            ->select([
+                'wa.id', 'wa.workflow_type', 'wa.reference_number', 'wa.status',
+                DB::raw('COALESCE(wa.requested_at, wa.requested_date, wa.created_at) as requested_at'),
+                DB::raw('COALESCE(wa.approved_at, wa.approved_date) as approved_at'),
+                'wa.comments', 'u.name as approver_name',
+            ])
+            ->orderByDesc(DB::raw('COALESCE(wa.requested_at, wa.requested_date, wa.created_at)'));
 
+        if ($status && $status !== 'all') $query->where('wa.status', $status);
+        if ($q !== '') {
+            $query->where(function ($n) use ($q) {
+                $n->where('wa.workflow_type', 'ilike', "%{$q}%")
+                  ->orWhere('wa.reference_number', 'ilike', "%{$q}%")
+                  ->orWhere('wa.comments', 'ilike', "%{$q}%")
+                  ->orWhere('u.name', 'ilike', "%{$q}%");
+            });
+        }
+
+        $payload = $this->paginate($query);
+        $payload['data'] = array_map(function (array $row) {
+            $row['requested_at'] = $row['requested_at'] ? Carbon::parse($row['requested_at'])->format('d M Y, H:i') : null;
+            $row['approved_at'] = $row['approved_at'] ? Carbon::parse($row['approved_at'])->format('d M Y, H:i') : null;
+            $row['approver_name'] = $row['approver_name'] ?? '—';
+            $row['comments'] = $row['comments'] ?? '';
+            return $row;
+        }, $payload['data']);
+
+        $base = DB::table('workflow_approvals')->where('tenant_id', $tenantId);
         $summary = [
-            'total_approvals' => $approvals->count(),
-            'pending_approvals' => $approvals->where('status', 'pending')->count(),
-            'approved' => $approvals->where('status', 'approved')->count(),
-            'rejected' => $approvals->where('status', 'rejected')->count(),
+            'total_approvals' => (int) (clone $base)->count(),
+            'pending_approvals' => (int) (clone $base)->where('status', 'pending')->count(),
+            'approved' => (int) (clone $base)->where('status', 'approved')->count(),
+            'rejected' => (int) (clone $base)->where('status', 'rejected')->count(),
         ];
 
         return Inertia::render('Workflow/Approvals', [
-            'approvals' => $approvals,
+            'approvals' => $payload,
             'summary' => $summary,
+            'filters' => ['status' => $status ?? 'all', 'q' => $q],
         ]);
+    }
+
+    public function approveRequest(Request $request, string $id)
+    {
+        $tenantId = $this->tenantId();
+        $comment = $request->input('comments');
+        $updates = ['status' => 'approved', 'comments' => $comment, 'updated_at' => now()];
+        try { $updates['approved_at'] = now(); } catch (\Throwable $e) {}
+        try { $updates['approved_date'] = now()->toDateString(); } catch (\Throwable $e) {}
+        if ($request->user()) { try { $updates['approver_id'] = $request->user()->id; } catch (\Throwable $e) {} }
+
+        // update with only columns that exist by attempting minimal set
+        $row = DB::table('workflow_approvals')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$row, 404);
+        $safe = ['status' => 'approved', 'updated_at' => now()];
+        if (property_exists($row, 'comments')) $safe['comments'] = $comment;
+        if (property_exists($row, 'approved_at')) $safe['approved_at'] = now();
+        if (property_exists($row, 'approved_date')) $safe['approved_date'] = now()->toDateString();
+        if (property_exists($row, 'approver_id') && $request->user()) $safe['approver_id'] = $request->user()->id;
+        DB::table('workflow_approvals')->where('tenant_id', $tenantId)->where('id', $id)->update($safe);
+
+        return $request->expectsJson() ? response()->json(['success' => true]) : back()->with('success', 'Request approved.');
+    }
+
+    public function rejectRequest(Request $request, string $id)
+    {
+        $tenantId = $this->tenantId();
+        $comment = $request->input('comments');
+        $row = DB::table('workflow_approvals')->where('tenant_id', $tenantId)->where('id', $id)->first();
+        abort_if(!$row, 404);
+        $safe = ['status' => 'rejected', 'updated_at' => now()];
+        if (property_exists($row, 'comments')) $safe['comments'] = $comment;
+        if (property_exists($row, 'approved_at')) $safe['approved_at'] = now();
+        if (property_exists($row, 'approved_date')) $safe['approved_date'] = now()->toDateString();
+        if (property_exists($row, 'approver_id') && $request->user()) $safe['approver_id'] = $request->user()->id;
+        DB::table('workflow_approvals')->where('tenant_id', $tenantId)->where('id', $id)->update($safe);
+
+        return $request->expectsJson() ? response()->json(['success' => true]) : back()->with('success', 'Request rejected.');
     }
 
     public function workflowRules(): Response
@@ -3655,7 +7072,7 @@ class PageController extends Controller
         ]);
     }
 
-    public function customerInvoices(): Response
+    public function portalCustomerInvoices(): Response
     {
         $tenantId = $this->tenantId();
 

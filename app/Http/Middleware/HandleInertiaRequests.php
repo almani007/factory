@@ -29,6 +29,39 @@ class HandleInertiaRequests extends Middleware
             }
         }
 
+        $notifications = [];
+        $unreadCount = 0;
+        if ($user) {
+            try {
+                $tenantIdForNotif = $tenant?->id ?? ($user->tenant_id ?? 0);
+                $rows = DB::table('notifications')
+                    ->where('tenant_id', $tenantIdForNotif)
+                    ->orderByDesc('created_at')
+                    ->limit(10)
+                    ->get();
+
+                $notifications = $rows->map(function ($n) {
+                    $arr = (array) $n;
+                    $arr['body'] = $arr['body'] ?? $arr['message'] ?? '';
+                    $arr['is_read'] = !empty($arr['read_at']) || !empty($arr['is_read']);
+                    $arr['data'] = is_string($arr['data'] ?? null) ? (json_decode($arr['data'], true) ?: []) : ($arr['data'] ?? []);
+                    $arr['created_at'] = !empty($arr['created_at']) ? \Illuminate\Support\Carbon::parse($arr['created_at'])->format('d M Y, H:i') : '';
+                    $arr['actor_name'] = $arr['actor_name'] ?? 'System';
+                    $arr['type'] = $arr['type'] ?? 'info';
+                    unset($arr['message']);
+                    return $arr;
+                })->values()->all();
+
+                $unreadCount = (int) DB::table('notifications')
+                    ->where('tenant_id', $tenantIdForNotif)
+                    ->whereNull('read_at')
+                    ->count();
+            } catch (\Throwable $e) {
+                $notifications = [];
+                $unreadCount = 0;
+            }
+        }
+
         return array_merge(parent::share($request), [
             'appName' => config('app.name', 'Brixel FactoryOS'),
             'user' => $user ? [
@@ -41,16 +74,8 @@ class HandleInertiaRequests extends Middleware
                 'name' => $tenant->name,
                 'plan' => $tenant->plan,
             ] : null,
-            'notifications' => $user ? DB::table('notifications')
-                ->where('tenant_id', $tenant?->id ?? 0)
-                ->whereNull('read_at')
-                ->orderByDesc('created_at')
-                ->limit(10)
-                ->get() : [],
-            'unread_count' => $user ? (int) DB::table('notifications')
-                ->where('tenant_id', $tenant?->id ?? 0)
-                ->whereNull('read_at')
-                ->count() : 0,
+            'notifications' => $notifications,
+            'unread_count' => $unreadCount,
         ]);
     }
 }

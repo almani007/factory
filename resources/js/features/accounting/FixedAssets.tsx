@@ -8,7 +8,7 @@ import { AppLayout } from "@/components/layout";
 import { PageHeader } from "@/components/layout";
 import { DataTable } from "@/components/DataTable";
 import { StatStrip } from "@/components/StatStrip";
-import { Plus, Building2, Eye, Edit } from "lucide-react";
+import { Plus, Eye, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -77,9 +77,10 @@ export default function FixedAssets() {
         ]}
         data={assets}
         meta={meta}
+        createUrl="/accounting/fixed-assets/create"
         rowActions={[
-          { label: "View", icon: <Eye size={14} />, variant: "ghost" },
-          { label: "Edit", icon: <Edit size={14} />, variant: "outline" },
+          { label: "View", icon: <Eye size={14} />, variant: "ghost", onClick: (row: any) => router.visit(`/accounting/fixed-assets/${row.id}`) },
+          { label: "Account Ledger", icon: <BookOpen size={14} />, variant: "ghost", visible: (row: any) => !!row.account_id, onClick: (row: any) => router.visit(`/accounting/chart-of-accounts/${row.account_id}/ledger`) },
         ]}
       />
     </AppLayout>

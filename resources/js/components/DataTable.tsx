@@ -18,10 +18,11 @@ interface Column<T> {
   format?: (value: any, row: T) => React.ReactNode;
 }
 
-interface RowAction {
+interface RowAction<T> {
   label: string;
   href?: string;
-  onClick?: () => void;
+  onClick?: (row: T) => void;
+  visible?: (row: T) => boolean;
   variant?: "default" | "outline" | "ghost" | "danger";
   icon?: React.ReactNode;
 }
@@ -32,7 +33,7 @@ interface DataTableProps<T extends Record<string, any>> {
   data: T[];
   emptyMessage?: string;
   createUrl?: string;
-  rowActions?: RowAction[];
+  rowActions?: RowAction<T>[];
   meta?: {
     current_page?: number;
     last_page?: number;
@@ -259,9 +260,9 @@ export function DataTable<T extends Record<string, any>>({
                     {rowActions && rowActions.length > 0 && (
                       <td className="whitespace-nowrap px-5 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          {rowActions.map((action) => {
+                          {rowActions.filter((action) => !action.visible || action.visible(row)).map((action) => {
                             const handleClick = () => {
-                              if (action.onClick) action.onClick();
+                              if (action.onClick) action.onClick(row);
                               else if (action.href) router.visit(action.href);
                             };
 
