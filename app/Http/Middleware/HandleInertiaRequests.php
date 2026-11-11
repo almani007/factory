@@ -41,6 +41,16 @@ class HandleInertiaRequests extends Middleware
                 'name' => $tenant->name,
                 'plan' => $tenant->plan,
             ] : null,
+            'notifications' => $user ? DB::table('notifications')
+                ->where('tenant_id', $tenant?->id ?? 0)
+                ->whereNull('read_at')
+                ->orderByDesc('created_at')
+                ->limit(10)
+                ->get() : [],
+            'unread_count' => $user ? (int) DB::table('notifications')
+                ->where('tenant_id', $tenant?->id ?? 0)
+                ->whereNull('read_at')
+                ->count() : 0,
         ]);
     }
 }

@@ -3,11 +3,11 @@
  * Stock movements ledger and inventory management.
  */
 
-import { Head, Link, usePage, useForm } from "@inertiajs/react";
+import { Head, Link, router, usePage, useForm } from "@inertiajs/react";
 import { AppLayout } from "@/components/layout";
 import { PageHeader } from "@/components/layout";
 import { DataTable } from "@/components/DataTable";
-import { Plus, Search, Filter, Download } from "lucide-react";
+import { Plus, Search, Filter, Download, Eye, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -48,7 +48,7 @@ export default function Inventory() {
         title="Inventory Management"
         subtitle="Stock movements, balances, and warehouse operations"
       >
-        <Button>
+        <Button onClick={() => router.visit("/inventory/create")}>
           <Plus size={16} /> New Movement
         </Button>
       </PageHeader>
@@ -88,6 +88,10 @@ export default function Inventory() {
         columns={columns}
         data={movements}
         meta={meta}
+        rowActions={[
+          { label: "View", icon: <Eye size={14} />, variant: "ghost" },
+          { label: "Edit", icon: <Edit size={14} />, variant: "outline" },
+        ]}
       />
     </AppLayout>
   );

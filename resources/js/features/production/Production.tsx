@@ -3,12 +3,12 @@
  * Production order management and work orders.
  */
 
-import { Head, Link, usePage } from "@inertiajs/react";
+import { Head, Link, router, usePage } from "@inertiajs/react";
 import { AppLayout } from "@/components/layout";
 import { PageHeader } from "@/components/layout";
 import { DataTable } from "@/components/DataTable";
 import { StatStrip } from "@/components/StatStrip";
-import { Plus } from "lucide-react";
+import { Plus, Eye, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -58,7 +58,7 @@ export default function Production() {
         title="Production Orders"
         subtitle="Work orders, material issues, and production tracking"
       >
-        <Button>
+        <Button onClick={() => router.visit("/production/create")}>
           <Plus size={16} /> New Production Order
         </Button>
       </PageHeader>
@@ -76,6 +76,10 @@ export default function Production() {
         columns={columns}
         data={orders}
         meta={meta}
+        rowActions={[
+          { label: "View", icon: <Eye size={14} />, variant: "ghost" },
+          { label: "Edit", icon: <Edit size={14} />, variant: "outline" },
+        ]}
       />
     </AppLayout>
   );

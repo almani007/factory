@@ -24,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Inertia middleware stack
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
+            \App\Http\Middleware\RbacMiddleware::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
         ]);
 

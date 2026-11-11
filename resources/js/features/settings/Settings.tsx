@@ -3,7 +3,7 @@
  * Tenant-wide application preferences.
  */
 
-import { usePage } from "@inertiajs/react";
+import { usePage, router } from "@inertiajs/react";
 import { AppLayout } from "@/components/layout";
 import { PageHeader } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,7 +21,7 @@ export default function Settings() {
         title="Settings"
         subtitle="Company profile, localisation and manufacturing defaults"
       >
-        <Button>
+        <Button onClick={() => router.visit("/settings")}>
           <Save size={16} /> Save Changes
         </Button>
       </PageHeader>

@@ -2252,5 +2252,219 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => $now,
             ]);
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Default Permissions for RBAC
+        |--------------------------------------------------------------------------
+        */
+        $permissions = [
+            // RBAC
+            ['roles.view', 'View Roles', 'rbac'],
+            ['roles.create', 'Create Roles', 'rbac'],
+            ['roles.edit', 'Edit Roles', 'rbac'],
+            ['roles.delete', 'Delete Roles', 'rbac'],
+            ['permissions.view', 'View Permissions', 'rbac'],
+            ['permissions.edit', 'Edit Permissions', 'rbac'],
+            ['users.view', 'View Users', 'rbac'],
+            ['users.edit', 'Edit Users', 'rbac'],
+
+            // Tenancy
+            ['tenancy.view', 'View Tenancy', 'tenancy'],
+            ['tenancy.create', 'Create Tenancy', 'tenancy'],
+
+            // Settings
+            ['settings.view', 'View Settings', 'settings'],
+
+            // Accounting
+            ['accounting.view', 'View Accounting', 'accounting'],
+            ['accounts.view', 'View Chart of Accounts', 'accounting'],
+            ['accounts.create', 'Create Accounts', 'accounting'],
+            ['journals.create', 'Create Journal Entries', 'accounting'],
+            ['reports.view', 'View Financial Reports', 'accounting'],
+            ['bank.view', 'View Bank Reconciliation', 'accounting'],
+            ['assets.view', 'View Fixed Assets', 'accounting'],
+            ['assets.create', 'Create Fixed Assets', 'accounting'],
+
+            // Inventory
+            ['inventory.view', 'View Inventory', 'inventory'],
+            ['inventory.create', 'Create Inventory Movements', 'inventory'],
+            ['inventory.transfer', 'Transfer Stock', 'inventory'],
+            ['inventory.transfer.create', 'Create Stock Transfers', 'inventory'],
+            ['inventory.batch.view', 'View Batches', 'inventory'],
+            ['inventory.batch.create', 'Create Batches', 'inventory'],
+            ['inventory.serial.view', 'View Serial Numbers', 'inventory'],
+            ['inventory.serial.create', 'Create Serial Numbers', 'inventory'],
+
+            // Purchasing
+            ['purchasing.view', 'View Purchasing', 'purchasing'],
+            ['purchasing.create', 'Create Purchase Orders', 'purchasing'],
+            ['supplier.invoices.view', 'View Supplier Invoices', 'purchasing'],
+            ['supplier.invoices.create', 'Create Supplier Invoices', 'purchasing'],
+            ['vendors.view', 'View Vendor Scorecards', 'purchasing'],
+
+            // Sales
+            ['sales.view', 'View Sales', 'sales'],
+            ['sales.create', 'Create Sales Orders', 'sales'],
+            ['sales.quotes.view', 'View Sales Quotes', 'sales'],
+            ['sales.quotes.create', 'Create Sales Quotes', 'sales'],
+            ['sales.invoices.view', 'View Customer Invoices', 'sales'],
+            ['sales.invoices.create', 'Create Customer Invoices', 'sales'],
+
+            // Production
+            ['production.view', 'View Production', 'production'],
+            ['production.create', 'Create Production Orders', 'production'],
+            ['work.orders.view', 'View Work Orders', 'production'],
+            ['work.orders.create', 'Create Work Orders', 'production'],
+            ['production.schedule.view', 'View Production Schedule', 'production'],
+
+            // Manufacturing
+            ['boms.view', 'View BOMs', 'manufacturing'],
+            ['boms.create', 'Create BOMs', 'manufacturing'],
+            ['routings.view', 'View Routings', 'manufacturing'],
+            ['routings.create', 'Create Routings', 'manufacturing'],
+
+            // Quality
+            ['quality.view', 'View Quality', 'quality'],
+            ['quality.create', 'Create Quality Inspections', 'quality'],
+            ['quality.ncr.view', 'View NCR Reports', 'quality'],
+            ['quality.ncr.create', 'Create NCR Reports', 'quality'],
+            ['quality.capa.view', 'View CAPA', 'quality'],
+            ['quality.capa.create', 'Create CAPA', 'quality'],
+
+            // Costing
+            ['costing.view', 'View Costing', 'costing'],
+            ['costing.create', 'Create Standard Costs', 'costing'],
+
+            // Dispatch
+            ['dispatch.view', 'View Dispatch', 'dispatch'],
+            ['dispatch.create', 'Create Dispatches', 'dispatch'],
+
+            // MRP
+            ['mrp.view', 'View MRP', 'mrp'],
+            ['mrp.run', 'Run MRP', 'mrp'],
+
+            // Maintenance
+            ['maintenance.view', 'View Maintenance', 'maintenance'],
+            ['maintenance.create', 'Create Machines', 'maintenance'],
+            ['maintenance.preventive.view', 'View Preventive Maintenance', 'maintenance'],
+            ['maintenance.preventive.create', 'Create Preventive Maintenance', 'maintenance'],
+
+            // HR
+            ['hr.view', 'View HR', 'hr'],
+            ['hr.create', 'Create Employees', 'hr'],
+            ['hr.attendance.view', 'View Time & Attendance', 'hr'],
+            ['hr.attendance.create', 'Create Time Entries', 'hr'],
+            ['hr.leave.view', 'View Leave Requests', 'hr'],
+            ['hr.leave.create', 'Create Leave Requests', 'hr'],
+            ['hr.shifts.view', 'View Shifts', 'hr'],
+            ['hr.shifts.create', 'Create Shifts', 'hr'],
+
+            // Supply Chain
+            ['supply.receipts.view', 'View Goods Receipts', 'supply'],
+            ['supply.receipts.create', 'Create Goods Receipts', 'supply'],
+            ['supply.requisitions.view', 'View Purchase Requisitions', 'supply'],
+            ['supply.requisitions.create', 'Create Purchase Requisitions', 'supply'],
+
+            // Documents
+            ['documents.view', 'View Documents', 'documents'],
+            ['documents.create', 'Create Documents', 'documents'],
+
+            // Reports
+            ['reports.view', 'View Reports', 'reporting'],
+            ['reports.custom.view', 'View Custom Reports', 'reporting'],
+            ['reports.custom.create', 'Create Custom Reports', 'reporting'],
+
+            // Analytics
+            ['analytics.view', 'View Analytics', 'reporting'],
+        ];
+
+        foreach ($permissions as [$name, $display, $category]) {
+            DB::table('permissions')->insert([
+                'tenant_id' => $tenantId,
+                'name' => $name,
+                'guard_name' => 'web',
+                'category' => $category,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+
+        // Assign all permissions to super_admin role
+        $superAdminRole = DB::table('roles')->where('name', 'super_admin')->where('tenant_id', $tenantId)->first();
+        if ($superAdminRole) {
+            $allPermissionIds = DB::table('permissions')->where('tenant_id', $tenantId)->pluck('id');
+            foreach ($allPermissionIds as $permId) {
+                DB::table('role_has_permissions')->insert([
+                    'role_id' => $superAdminRole->id,
+                    'permission_id' => $permId,
+                ]);
+            }
+        }
+
+        // Assign key permissions to admin role
+        $adminRole = DB::table('roles')->where('name', 'admin')->where('tenant_id', $tenantId)->first();
+        if ($adminRole) {
+            $adminPermissions = [
+                'roles.view', 'users.view', 'users.edit',
+                'accounting.view', 'accounts.view', 'journals.create',
+                'reports.view', 'bank.view', 'assets.view',
+                'inventory.view', 'inventory.create',
+                'purchasing.view', 'purchasing.create',
+                'supplier.invoices.view', 'vendors.view',
+                'sales.view', 'sales.create',
+                'sales.quotes.view', 'sales.quotes.create',
+                'sales.invoices.view', 'sales.invoices.create',
+                'production.view', 'production.create',
+                'work.orders.view', 'work.orders.create',
+                'production.schedule.view',
+                'quality.view', 'quality.create',
+                'quality.ncr.view', 'quality.ncr.create',
+                'quality.capa.view', 'quality.capa.create',
+                'costing.view', 'costing.create',
+                'dispatch.view', 'dispatch.create',
+                'mrp.view', 'mrp.run',
+                'boms.view', 'routings.view',
+                'maintenance.view', 'maintenance.create',
+                'maintenance.preventive.view', 'maintenance.preventive.create',
+                'hr.view', 'hr.create',
+                'hr.attendance.view', 'hr.attendance.create',
+                'hr.leave.view', 'hr.leave.create',
+                'hr.shifts.view', 'hr.shifts.create',
+                'supply.receipts.view', 'supply.receipts.create',
+                'supply.requisitions.view', 'supply.requisitions.create',
+                'documents.view', 'documents.create',
+                'reports.custom.view', 'reports.custom.create',
+                'analytics.view',
+            ];
+            $allPermissionIds = DB::table('permissions')->where('tenant_id', $tenantId)->whereIn('name', $adminPermissions)->pluck('id');
+            foreach ($allPermissionIds as $permId) {
+                DB::table('role_has_permissions')->insert([
+                    'role_id' => $adminRole->id,
+                    'permission_id' => $permId,
+                ]);
+            }
+        }
+
+        // Assign limited permissions to manager role
+        $managerRole = DB::table('roles')->where('name', 'production_manager')->where('tenant_id', $tenantId)->first();
+        if ($managerRole) {
+            $managerPermissions = [
+                'production.view', 'production.create',
+                'work.orders.view', 'work.orders.create',
+                'quality.view', 'quality.create',
+                'quality.ncr.view', 'quality.ncr.create',
+                'inventory.view', 'boms.view', 'routings.view',
+                'reports.view', 'analytics.view',
+                'mrp.view',
+            ];
+            $allPermissionIds = DB::table('permissions')->where('tenant_id', $tenantId)->whereIn('name', $managerPermissions)->pluck('id');
+            foreach ($allPermissionIds as $permId) {
+                DB::table('role_has_permissions')->insert([
+                    'role_id' => $managerRole->id,
+                    'permission_id' => $permId,
+                ]);
+            }
+        }
     }
 }

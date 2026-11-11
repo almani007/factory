@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # Database
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: factory
+      POSTGRES_USER: factory
+      POSTGRES_PASSWORD: factory_secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Redis
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # PHP Application
+  factory:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV=local
+      APP_DEBUG=true
+      DB_CONNECTION=pgsql
+      DB_HOST=postgres
+      DB_PORT=5432
+      DB_DATABASE=factory
+      DB_USERNAME=factory
+      DB_PASSWORD=factory_secret
+      CACHE_DRIVER=redis
+      QUEUE_CONNECTION=redis
+      SESSION_DRIVER=redis
+      REDIS_HOST=redis
+      REDIS_HOST=redis
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./public/build:/var/www/html/public/build
+
+  # Vite Dev Server (for frontend development)
+  vite:
+    image: node:20-alpine
+    working_dir: /var/www/html
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/var/www/html
+      - /Users/pl/Documents/sites/factory/node_modules:/var/www/html/node_modules
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    driver: bridge

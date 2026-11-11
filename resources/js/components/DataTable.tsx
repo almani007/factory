@@ -1,13 +1,14 @@
-import * as React from "react";
 /**
  * Brixel FactoryOS — DataTable
- * Server-driven table: Inertia visits handle search, sorting and pagination.
- * Professional styling with zebra rows, status badges, and clean typography.
+ * Professional data table with zebra rows, hover effects, and status badges.
  */
 
+import * as React from "react";
 import { Head, Link, router, usePage } from "@inertiajs/react";
 import { ChevronDown, ChevronLeft, ChevronRight, Inbox, Plus, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 interface Column<T> {
   key: string;
@@ -17,12 +18,21 @@ interface Column<T> {
   format?: (value: any, row: T) => React.ReactNode;
 }
 
+interface RowAction {
+  label: string;
+  href?: string;
+  onClick?: () => void;
+  variant?: "default" | "outline" | "ghost" | "danger";
+  icon?: React.ReactNode;
+}
+
 interface DataTableProps<T extends Record<string, any>> {
   title: string;
   columns: Column<T>[];
   data: T[];
   emptyMessage?: string;
   createUrl?: string;
+  rowActions?: RowAction[];
   meta?: {
     current_page?: number;
     last_page?: number;
@@ -60,6 +70,10 @@ const STATUS_STYLES: Record<string, string> = {
   rejected: "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200",
   cancelled: "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200",
   failed: "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200",
+  failed_review: "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200",
+  ready: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
+  processing: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200",
+  shipping: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200",
 };
 
 function StatusBadge({ value }: { value: string }) {
@@ -83,6 +97,7 @@ export function DataTable<T extends Record<string, any>>({
   data,
   emptyMessage = "No records found.",
   createUrl,
+  rowActions,
   meta,
   className,
 }: DataTableProps<T>) {
@@ -132,7 +147,7 @@ export function DataTable<T extends Record<string, any>>({
     <div className={className}>
       <Head title={`${title} — Brixel FactoryOS`} />
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all">
+      <div className={cn("overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm", className)}>
         <div className="flex flex-col gap-3 border-b border-slate-200/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-base font-semibold tracking-tight text-slate-900">{title}</h2>
@@ -160,7 +175,7 @@ export function DataTable<T extends Record<string, any>>({
             {createUrl && (
               <Link
                 href={createUrl}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-factory-600 px-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-factory-700"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-factory-600 px-3 text-sm font-medium text-white shadow-sm shadow-factory-500/20 transition-all hover:bg-factory-700 hover:shadow-factory-500/40 hover:-translate-y-1 active:scale-95"
               >
                 <Plus size={15} />
                 New
@@ -180,7 +195,7 @@ export function DataTable<T extends Record<string, any>>({
                     className={cn(
                       "whitespace-nowrap px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500",
                       col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left",
-                      col.sortable && "cursor-pointer select-none hover:text-slate-700"
+                      col.sortable && "cursor-pointer select-none hover:text-slate-700 transition-colors"
                     )}
                   >
                     <span className="inline-flex items-center gap-1">
@@ -197,22 +212,29 @@ export function DataTable<T extends Record<string, any>>({
                     </span>
                   </th>
                 ))}
+                {rowActions && rowActions.length > 0 && (
+                  <th className="whitespace-nowrap px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500 text-center">
+                    Actions
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {data.length === 0 ? (
                 <tr>
-                  <td colSpan={columns.length} className="px-5 py-14 text-center">
-                    <Inbox size={22} className="mx-auto mb-2 text-slate-300" />
-                    <p className="text-sm font-medium text-slate-600">{emptyMessage}</p>
-                    <p className="mt-0.5 text-xs text-slate-400">
-                      Records will appear here once they are created.
-                    </p>
+                  <td colSpan={columns.length + (rowActions ? 1 : 0)} className="px-5 py-14 text-center">
+                    <div className="flex flex-col items-center justify-center">
+                      <Inbox size={22} className="mx-auto mb-2 text-slate-300" />
+                      <p className="text-sm font-medium text-slate-600">{emptyMessage}</p>
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        Records will appear here once they are created.
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (
                 data.map((row, index) => (
-                  <tr key={row.id ?? index} className="transition-colors hover:bg-slate-50/70">
+                  <tr key={row.id ?? index} className="transition-colors hover:bg-slate-50/70 hover:-translate-y-0.5">
                     {columns.map((col) => {
                       const value = row[col.key];
 
@@ -234,6 +256,40 @@ export function DataTable<T extends Record<string, any>>({
                         </td>
                       );
                     })}
+                    {rowActions && rowActions.length > 0 && (
+                      <td className="whitespace-nowrap px-5 py-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          {rowActions.map((action) => {
+                            const handleClick = () => {
+                              if (action.onClick) action.onClick();
+                              else if (action.href) router.visit(action.href);
+                            };
+
+                            const baseStyles =
+                              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-factory-500";
+                            const variantStyles = {
+                              default: "bg-factory-600 text-white hover:bg-factory-700 hover:shadow-factory-500/20 active:scale-95",
+                              outline: "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 active:scale-95",
+                              ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:scale-95",
+                              danger: "bg-rose-600 text-white hover:bg-rose-700 hover:shadow-rose-500/20 active:scale-95",
+                            };
+
+                            return (
+                              <button
+                                key={action.label}
+                                onClick={handleClick}
+                                className={cn(baseStyles, variantStyles[action.variant ?? "ghost"])}
+                                title={action.label}
+                              >
+                                {action.icon ?? (
+                                  <span className="sr-only">{action.label}</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}

@@ -3,12 +3,12 @@
  * Quality inspections and pass/fail tracking.
  */
 
-import { Head, Link, usePage } from "@inertiajs/react";
+import { Head, Link, router, usePage } from "@inertiajs/react";
 import { AppLayout } from "@/components/layout";
 import { PageHeader } from "@/components/layout";
 import { DataTable } from "@/components/DataTable";
 import { StatStrip } from "@/components/StatStrip";
-import { Plus } from "lucide-react";
+import { Plus, Eye, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface QualityInspection {
@@ -45,7 +45,7 @@ export default function Quality() {
         title="Quality Control"
         subtitle="Incoming, in-process, and final product inspections"
       >
-        <Button>
+        <Button onClick={() => router.visit("/quality/create")}>
           <Plus size={16} /> New Inspection
         </Button>
       </PageHeader>
@@ -63,6 +63,10 @@ export default function Quality() {
         columns={columns}
         data={inspections}
         meta={meta}
+        rowActions={[
+          { label: "View", icon: <Eye size={14} />, variant: "ghost" },
+          { label: "Edit", icon: <Edit size={14} />, variant: "outline" },
+        ]}
       />
     </AppLayout>
   );

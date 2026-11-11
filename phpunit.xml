@@ -1,39 +1,71 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.4/phpunit.xsd"
-         bootstrap="vendor/autoload.php"
-         colors="true"
-         cacheDirectory=".phpunit.cache">
-    <testsuites>
-        <testsuite name="Unit">
-            <directory suffix="Test.php">./tests/Unit</directory>
-        </testsuite>
-        <testsuite name="Feature">
-            <directory suffix="Test.php">./tests/Feature</directory>
-        </testsuite>
-        <testsuite name="Integration">
-            <directory suffix="Test.php">./tests/Integration</directory>
-        </testsuite>
-    </testsuites>
+<?php
 
-    <source>
-        <include>
-            <directory>./app</directory>
-        </include>
-    </source>
+return [
 
-    <php>
-        <env name="APP_ENV" value="testing"/>
-        <env name="BCRYPT_ROUNDS" value="4"/>
-        <env name="CACHE_DRIVER" value="array"/>
-        <env name="QUEUE_CONNECTION" value="sync"/>
-        <env name="SESSION_DRIVER" value="array"/>
-        <env name="MAIL_MAILER" value="array"/>
-    </php>
+    'env' => env('APP_ENV', 'testing'),
 
-    <coverage>
-        <include>
-            <directory prefix="app">./app</directory>
-        </include>
-    </coverage>
-</phpunit>
+    'debug' => true,
+
+    'timezone' => 'UTC',
+
+    'locale' => 'en',
+
+    'faker_locale' => 'en_US',
+
+    'test_dsn' => env('TEST_DSN', 'sqlite:///:memory:'),
+
+    'prepends' => [
+        Tests\TestCase::class,
+    ],
+
+    'prefixes' => [
+        '',
+        'Tests\\Feature\\',
+        'Tests\\Unit\\',
+    ],
+
+    'suffix' => 'Test',
+
+    'require' => [
+        __DIR__.'/Macros.php',
+        __DIR__.'/Feature/Helpers.php',
+    ],
+
+    'bootstrap' => [],
+
+    'colors' => false,
+
+    'order' => [
+        'tests\\Feature\\*',
+        'tests\\Unit\\*',
+    ],
+
+    'fail_fast' => false,
+    'fail_fast_groups' => [],
+
+    'exclude_groups' => [],
+
+    'groups' => [],
+
+    'stop_on_failure' => false,
+    'stop_on_error' => false,
+    'stop_on_warning' => false,
+    'stop_on_risky' => false,
+    'stop_on_incomplete' => false,
+    'stop_on_skipped' => false,
+
+    'report_useless_tests' => true,
+    'strict_coverage' => false,
+    'strict_globals' => false,
+    'strict_error_handler' => true,
+    'strict_return_type' => true,
+
+    'cache_dir' => storage_path('tests/cache'),
+
+    'cache_results' => true,
+
+    'stop_on_defect' => false,
+    'bootstrap_files' => [],
+
+    'allow_you_to_change' => true,
+];

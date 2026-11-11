@@ -3,12 +3,14 @@
  * Production costing and variance analysis.
  */
 
-import { Head, Link, usePage } from "@inertiajs/react";
+import { Head, Link, router, usePage } from "@inertiajs/react";
 import { AppLayout } from "@/components/layout";
 import { PageHeader } from "@/components/layout";
 import { KPICard } from "@/components/KPICard";
 import { DataTable } from "@/components/DataTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface CostVariance {
   id: number;
@@ -36,7 +38,11 @@ export default function Costing() {
       <PageHeader
         title="Production Costing"
         subtitle="Standard vs actual cost analysis and variance tracking"
-      />
+      >
+        <Button onClick={() => router.visit("/costing/create")}>
+          <Plus size={16} /> New Standard Cost
+        </Button>
+      </PageHeader>
 
       {/* Cost Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
