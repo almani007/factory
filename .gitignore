@@ -7,6 +7,7 @@
 /public/storage
 /public/build
 /public/*.php
+!/public/index.php
 /resources/js/vendor
 /storage/*.key
 /bootstrap/cache/*.php

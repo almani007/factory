@@ -144,12 +144,12 @@ cp .env.example .env
 # Start all services (PHP, Nginx, PostgreSQL, Redis, Node, Queue, Scheduler)
 docker compose up -d --build
 
-# That's it! The app is running at: http://localhost:8087
+# That's it! The app is running at: http://localhost:8088
 ```
 
 **Services included:**
-- `factory_app` — PHP 8.5 + Laravel (port 9000)
-- `factory_nginx` — Nginx web server (port 8087)
+- `factory_app` — PHP 8.5 + Laravel (port 9001)
+- `factory_nginx` — Nginx web server (port 8088)
 - `factory_postgres` — PostgreSQL 18 (port 5432, internal)
 - `factory_redis` — Redis 8 (port 6379, internal)
 - `factory_node` — Vite dev server (optional `dev` profile, port 5173)
@@ -222,7 +222,7 @@ chmod +x scripts/setup.sh
 git clone <repo-url> factory
 cd factory
 ./scripts/setup.sh
-# App is running at http://localhost:8087
+# App is running at http://localhost:8088
 ```
 
 ## Testing

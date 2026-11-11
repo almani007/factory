@@ -14,7 +14,7 @@ x-laravel-env: &laravel-env
   APP_NAME: "Brixel FactoryOS"
   APP_ENV: local
   APP_DEBUG: "true"
-  APP_URL: http://localhost:8087
+  APP_URL: ${APP_URL:-http://localhost:${APP_PORT:-8088}}
   APP_TIMEZONE: Asia/Karachi
   APP_LOCALE: en
   TELESCOPE_ENABLED: "false"
@@ -76,7 +76,7 @@ services:
       <<: *laravel-env
       RUN_BOOTSTRAP: "true"
     ports:
-      - "9000:9000"
+      - "${FORWARD_PHP_PORT:-9001}:9000"
     healthcheck:
       test: ["CMD", "php", "-r", "new PDO('pgsql:host=postgres;port=5432;dbname=factory', 'factory', 'factory_secret');"]
       interval: 30s
@@ -92,7 +92,7 @@ services:
     container_name: factory_nginx
     restart: unless-stopped
     ports:
-      - "8087:80"
+      - "${APP_PORT:-8088}:80"
     volumes:
       - .:/var/www/html:ro
       - factory_build:/var/www/html/public/build:ro
