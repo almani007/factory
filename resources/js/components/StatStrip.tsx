@@ -1,9 +1,9 @@
-import * as React from "react";
 /**
  * Brixel FactoryOS — StatStrip
- * Compact headline metrics above a data table with tone-based coloring.
+ * Professional animated stat cards with gradients and hover effects.
  */
 
+import * as React from "react";
 import { cn } from "@/lib/utils";
 
 interface Stat {
@@ -11,36 +11,33 @@ interface Stat {
   value: string | number;
   hint?: string;
   tone?: "default" | "success" | "danger" | "warning" | "info";
+  icon?: React.ReactNode;
+  gradient?: string;
 }
-
-const TONE_STYLE: Record<NonNullable<Stat["tone"]>, string> = {
-  default: "text-slate-900",
-  success: "text-emerald-600",
-  danger: "text-rose-600",
-  warning: "text-amber-600",
-  info: "text-sky-600",
-};
 
 export function StatStrip({ items }: { items: Stat[] }) {
   return (
-    <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 xl:grid-cols-5">
       {items.map((item) => (
-        <div
-          key={item.label}
-          className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+        <div key={item.label} className={cn(
+          "rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300",
+          item.gradient && `bg-gradient-to-br from-factory-600/10 to-factory-900/20 border-factory-600/20`
+        )}
         >
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center {item.gradient || 'bg-slate-100 text-slate-600'}">
+                {item.icon}
+              </div>
+            </div>
+            <div className="flex items-end gap-1">
+              <p className="text-sm font-medium text-slate-900 tabular-nums">{item.value}</p>
+              <span className="text-xs text-slate-500">{item.hint}</span>
+            </div>
+          </div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mt-4">
             {item.label}
           </p>
-          <p
-            className={cn(
-              "mt-2 text-2xl font-semibold tracking-tight tabular-nums",
-              TONE_STYLE[item.tone ?? "default"]
-            )}
-          >
-            {item.value}
-          </p>
-          {item.hint && <p className="mt-1 text-xs text-slate-500">{item.hint}</p>}
         </div>
       ))}
     </div>

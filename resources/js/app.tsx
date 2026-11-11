@@ -15,12 +15,28 @@ const pageModules = Object.fromEntries(
 
 createInertiaApp({
     resolve: (name) => {
+        // Support both simple names ("Dashboard") and compound names ("Accounting/ChartOfAccounts")
         const [moduleName, pageName] = name.includes("/")
             ? name.split("/")
             : [name, name];
 
-        const key = `./features/${moduleName.toLowerCase()}/${pageName.toLowerCase()}.tsx`;
-        const page = pageModules[key];
+        // Direct resolution: Dashboard → ./features/dashboard/dashboard.tsx
+        // Compound: Accounting/ChartOfAccounts → ./features/accounting/chartofaccounts.tsx
+        let key = `./features/${moduleName.toLowerCase()}/${pageName.toLowerCase()}.tsx`;
+        let page = pageModules[key];
+
+        // Fallback: split PascalCase compound names without slash
+        // AccountingChartOfAccounts → module=Accounting, page=ChartOfAccounts
+        if (!page && !name.includes("/")) {
+            const match = name.match(/^[A-Z][a-z]+/);
+            if (match) {
+                const mod = match[0];
+                const rest = name.slice(mod.length);
+                const pg = rest || mod;
+                key = `./features/${mod.toLowerCase()}/${pg.toLowerCase()}.tsx`;
+                page = pageModules[key];
+            }
+        }
 
         if (!page) {
             throw new Error(`Inertia page not found: ${name} (looked for ${key})`);

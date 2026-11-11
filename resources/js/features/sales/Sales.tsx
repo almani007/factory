@@ -3,12 +3,12 @@
  * Customers and sales orders.
  */
 
-import { Head, Link, usePage } from "@inertiajs/react";
+import { Head, Link, router, usePage } from "@inertiajs/react";
 import { AppLayout } from "@/components/layout";
 import { PageHeader } from "@/components/layout";
 import { DataTable } from "@/components/DataTable";
 import { StatStrip } from "@/components/StatStrip";
-import { Plus } from "lucide-react";
+import { Plus, Eye, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface Customer {
@@ -36,7 +36,7 @@ export default function Sales() {
         title="Sales & Orders"
         subtitle="Customers, sales orders, and order tracking"
       >
-        <Button>
+        <Button onClick={() => router.visit("/sales/create")}>
           <Plus size={16} /> New Sales Order
         </Button>
       </PageHeader>
@@ -60,6 +60,10 @@ export default function Sales() {
         ]}
         data={customers}
         meta={meta}
+        rowActions={[
+          { label: "View", icon: <Eye size={14} />, variant: "ghost" },
+          { label: "Edit", icon: <Edit size={14} />, variant: "outline" },
+        ]}
       />
     </AppLayout>
   );

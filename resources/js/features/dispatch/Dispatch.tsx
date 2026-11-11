@@ -3,12 +3,12 @@
  * Dispatch orders and delivery tracking.
  */
 
-import { Head, Link, usePage } from "@inertiajs/react";
+import { Head, Link, router, usePage } from "@inertiajs/react";
 import { AppLayout } from "@/components/layout";
 import { PageHeader } from "@/components/layout";
 import { DataTable } from "@/components/DataTable";
 import { StatStrip } from "@/components/StatStrip";
-import { Plus } from "lucide-react";
+import { Plus, Eye, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface Dispatch {
@@ -36,7 +36,7 @@ export default function Dispatch() {
         title="Dispatch & Logistics"
         subtitle="Delivery planning, dispatch orders, and proof of delivery"
       >
-        <Button>
+        <Button onClick={() => router.visit("/dispatch/create")}>
           <Plus size={16} /> New Dispatch
         </Button>
       </PageHeader>
@@ -60,6 +60,10 @@ export default function Dispatch() {
         ]}
         data={dispatches}
         meta={meta}
+        rowActions={[
+          { label: "View", icon: <Eye size={14} />, variant: "ghost" },
+          { label: "Edit", icon: <Edit size={14} />, variant: "outline" },
+        ]}
       />
     </AppLayout>
   );
